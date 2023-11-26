@@ -1,0 +1,18 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+.idea
+cp.out
+
+*.text
+*.out
+
+tmp
+
+*.env
+
+# MacOS
+.DS_Store

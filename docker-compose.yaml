@@ -1,0 +1,24 @@
+version: "4.25.2"
+# //for golang with air
+services:
+  frontend:
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env
+    build: ./frontend
+  backend:
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./backend/.env
+    build:
+      context: ./
+      dockerfile: ./backend/Dockerfile
+      target: development
+    volumes:
+      - ./backend:/app
+    # depends_on:
+    #   - db
