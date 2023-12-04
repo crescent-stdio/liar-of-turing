@@ -18,7 +18,8 @@ services:
       context: ./
       dockerfile: ./backend/Dockerfile
       target: development
-    volumes:
-      - ./backend:/app
+    tty: true
+    # volumes:
+    #   - ./backend:/app
     # depends_on:
     #   - db

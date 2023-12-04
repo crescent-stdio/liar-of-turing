@@ -41,25 +41,36 @@ type RoomInfo struct {
 	Users  []User `json:"users"`
 }
 
-// port is the port to listen on
-const port = ":8080"
-
 // main is the main function
 func main() {
+	log.Println("Hello World")
+
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},                                       // 모든 도메인에서의 요청 허용
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}, // 허용할 메소드
+		AllowedOrigins:   []string{"*"}, // All origins
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           3000, // 5분
+		MaxAge:           3000, // 5 min
 	})
 
 	mux := routes()
 	log.Println("Starting channel listener")
 	go handlers.ListenToWsChannel()
 
+	port := ":8080"
 	log.Println("Starting server on port", port)
 
-	_ = http.ListenAndServe(port, c.Handler(mux))
+	err := http.ListenAndServe(port, c.Handler(mux))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handlers.Home)
+	mux.HandleFunc("/ws", handlers.WsEndpoint)
+
+	return mux
 }
