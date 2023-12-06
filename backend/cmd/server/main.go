@@ -66,8 +66,9 @@ func main() {
 	log.Println("Starting channel listener")
 	go handlers.ListenToWsChannel()
 
-	URL := os.Getenv("URL")
+	// URL := os.Getenv("URL")
 
+	URL := ":" + os.Getenv("PORT")
 	log.Println("URL", URL)
 
 	server := http.Server{
