@@ -161,7 +161,10 @@ export default function Home() {
           break;
       }
     };
-
+    socket.onclose = () => {
+      const jsonData = { action: "left_user" };
+      socket?.send(JSON.stringify(jsonData));
+    };
     return () => {
       // const jsonData = { action: "left_user" };
       // socket?.send(JSON.stringify(jsonData));

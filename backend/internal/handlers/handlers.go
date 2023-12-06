@@ -9,11 +9,13 @@ import (
 	"math/rand"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
+var mutex = &sync.Mutex{}
 var nicknames []models.Nickname
 
 func init() {
@@ -120,6 +122,8 @@ func ListenForWs(conn *WebSocketConnection) {
 		if r := recover(); r != nil {
 			log.Println("Error", r)
 		}
+		conn.Close()           // Ensure the connection is closed
+		delete(clients, *conn) // Remove the client from the ma
 	}()
 
 	var payload WsPayload
@@ -130,12 +134,14 @@ func ListenForWs(conn *WebSocketConnection) {
 		log.Println(payload)
 		log.Println("err:", err)
 		if err != nil {
-			// do nothing
+			log.Println("Error reading json:", err)
+			break // Exit loop on error
 		} else {
 			payload.Conn = *conn
 			Broadcast <- payload
 		}
 	}
+
 }
 
 func ListenToWsChannel() {
@@ -145,6 +151,7 @@ func ListenToWsChannel() {
 		e := <-Broadcast
 		log.Println("Got here")
 		log.Println("e.User:", e.User)
+		mutex.Lock()
 		switch e.Action {
 		case "new_message":
 			response.Timestamp = e.Timestamp
@@ -218,7 +225,9 @@ func ListenToWsChannel() {
 		// response.Message = fmt.Sprintf("Someone sent a message and Action is %s", e.Action)
 		// response.MessageType = "info"
 		// broadcastToAll(response)
+		mutex.Unlock()
 	}
+
 }
 
 func getUserList() []User {

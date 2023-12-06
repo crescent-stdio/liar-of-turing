@@ -1,5 +1,4 @@
-version: "4.25.2"
-# //for golang with air
+version: "3.8"
 services:
   frontend:
     depends_on:
@@ -9,16 +8,18 @@ services:
     env_file:
       - ./frontend/.env
     build: ./frontend
+    restart: always
   backend:
     ports:
       - "8080:8080"
     env_file:
       - ./backend/.env
-    build:
-      context: ./
-      dockerfile: ./backend/Dockerfile
-      target: development
-    tty: true
+    build: ./backend
+    restart: always
+
+    # tty: true
+    # command: tail -F anything
+
     # volumes:
     #   - ./backend:/app
     # depends_on:

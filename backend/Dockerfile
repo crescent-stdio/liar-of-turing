@@ -1,4 +1,4 @@
-# FROM golang:1.21.4-bullseye as base
+# FROM golang:1.21.4-alpine as base
 
 # FROM base as development
 
@@ -11,34 +11,60 @@
 # RUN go mod download
 
 # CMD ["air", "-c", ".air.toml"]
-FROM golang:1.21.4-bullseye as base
 
+###############################
+
+# Use golang:1.21.4-alpine as the base image
+FROM golang:1.21.4-alpine as base
+
+# Start the development stage based on the base image
 FROM base as development
 
-WORKDIR /usr/src/app
+# Set the working directory inside the container
+WORKDIR /app
 
-COPY ./backend/go.mod .
-COPY ./backend/go.sum .
+# Copy the go.mod and go.sum files first to leverage Docker cache
+COPY go.mod .
+COPY go.sum .
 
+# Tidy up the go modules
 RUN go mod tidy
 
-COPY ./backend/ .
+COPY . .
+# Copy the rest of the backend directory
 
+# Set environment variables for Go
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     GOOS=linux \
     GOARCH=amd64
 
+# Build the Go application
 RUN go build -a -ldflags="-s -w" -o bin/main cmd/server/main.go
 
-FROM debian:bullseye
+# Start a new stage from alpine for a smaller final image
+FROM alpine
 
-COPY --from=base /usr/src/app/bin/main ./main
+# Install necessary dependencies for the runtime
+RUN apk add --no-cache ca-certificates
+RUN apk update
+RUN apk add git
+RUN apk add upx
 
-ENV PORT 8080
-ENV HOSTNAME "127.0.0.1"
+# Copy the binary from the development stage to the current stage
+COPY --from=development /app/.env ./.env
+COPY --from=development /app/data ./data
+COPY --from=development /app/bin/main ./main
+
+# Set environment variables
+# ENV PORT 8080
+# ENV HOSTNAME "127.0.0.1"
+
+# Expose port 8080
 EXPOSE 8080
 
+# Make the binary executable
 RUN chmod +x ./main
 
+# Define the entrypoint
 ENTRYPOINT ["./main"]

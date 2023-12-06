@@ -4,8 +4,10 @@ import (
 	"liarOfTuring/internal/handlers"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
+	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 )
 
@@ -43,6 +45,12 @@ type RoomInfo struct {
 
 // main is the main function
 func main() {
+	err := godotenv.Load(".env")
+
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	log.Println("Hello World")
 
 	c := cors.New(cors.Options{
@@ -58,10 +66,15 @@ func main() {
 	log.Println("Starting channel listener")
 	go handlers.ListenToWsChannel()
 
-	port := ":8080"
-	log.Println("Starting server on port", port)
+	URL := os.Getenv("URL")
+	log.Println(URL)
 
-	err := http.ListenAndServe(port, c.Handler(mux))
+	server := http.Server{
+		Addr:    URL,
+		Handler: c.Handler(mux),
+	}
+	err = server.ListenAndServe()
+
 	if err != nil {
 		log.Fatal(err)
 	}
