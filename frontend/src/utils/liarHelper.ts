@@ -1,4 +1,5 @@
 import { Player } from "@/types/playerTypes";
+import crypto from "crypto";
 
 const setIsLiars = (players: Player[], liars: number[]) => {
   const newPlayers = [...players];
@@ -14,7 +15,8 @@ export const getUserUUID = (): string => {
     const userUUID = localStorage.getItem("turing_uuid");
 
     if (!userUUID || userUUID.length === 0) {
-      const item = crypto.randomUUID();
+      const item = crypto.randomBytes(16).toString("hex");
+
       localStorage.setItem("turing_uuid", item);
       return item;
     }
