@@ -4,7 +4,6 @@ import (
 	"liarOfTuring/internal/handlers"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 
 	"github.com/joho/godotenv"
@@ -66,12 +65,12 @@ func main() {
 	log.Println("Starting channel listener")
 	go handlers.ListenToWsChannel()
 
-	URL := os.Getenv("URL")
+	// URL := os.Getenv("URL")
 
-	log.Println("URL", URL)
+	// log.Println("URL", URL)
 
 	server := http.Server{
-		Addr:    URL,
+		// Addr:    URL,
 		Handler: c.Handler(mux),
 	}
 	err = server.ListenAndServe()
