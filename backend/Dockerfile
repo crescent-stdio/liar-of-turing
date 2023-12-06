@@ -57,8 +57,8 @@ COPY --from=development /app/data ./data
 COPY --from=development /app/bin/main ./main
 
 # Set environment variables
-# ENV PORT 8080
-# ENV HOSTNAME "0.0.0.0"
+ENV PORT 8080
+ENV HOSTNAME "0.0.0.0"
 
 # Expose port 8080
 EXPOSE 8080
