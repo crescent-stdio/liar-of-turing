@@ -12,6 +12,9 @@ RUN go mod download
 
 COPY . .
 
+ENV PORT 8080
+ENV HOSTNAME "0.0.0.0"
+
 CMD ["air", "-c", ".air.toml"]
 
 ###############################
