@@ -84,7 +84,6 @@ func main() {
 
 func routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handlers.Home)
 	mux.HandleFunc("/ws", handlers.WsEndpoint)
 
 	return mux

@@ -1,3 +1,5 @@
+import { User } from "./wsTypes";
+
 export interface Player {
   uuid: string;
   user_id: number;
@@ -9,13 +11,21 @@ export interface Game {
   players: Player[];
   isOver: boolean;
 }
-
 export interface Message {
-  id: number;
+  message_id: number;
   timestamp: number;
-  sender: string;
-  content: string;
+  user: User;
+  message: string;
+  message_type: string;
 }
-export interface Chat {
-  messages: Message[];
+
+export interface Room {
+  room_id: number;
+  room_name: string;
+  room_type: string;
+  room_status: string;
+  room_owner: User;
+  room_members: User[];
+  room_messages: Message[];
+  room_game: Game;
 }

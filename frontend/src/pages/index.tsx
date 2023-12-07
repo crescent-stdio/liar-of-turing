@@ -4,19 +4,20 @@ import { atomWithReset } from "jotai/utils";
 import { useAtom } from "jotai";
 import Image from "next/image";
 import { Inter } from "next/font/google";
-import { Chat, Message, Player } from "@/types/playerTypes";
+import { Message, Player } from "@/types/playerTypes";
 import { randomUUID } from "crypto";
 import { getUserUUID } from "@/utils/liarHelper";
+import { WsJsonRequest, WsJsonResponse } from "@/types/wsTypes";
+import { sendEnterHuman, sendLeftUser } from "@/utils/weHelper";
+import * as datetime from "date-fns";
+
+const getDayFromTimestamp = (timestamp: number): string => {
+  return datetime.format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss");
+};
 
 const inter = Inter({ subsets: ["latin"] });
-
-const messageAtom = atomWithReset<Chat>({
-  messages: [],
-});
-
-const chatLogAtom = atomWithReset<Chat>({
-  messages: [],
-});
+const messageAtom = atomWithReset<string>("");
+const chatLogAtom = atomWithReset<Message[]>([]);
 const userListAtom = atomWithReset<Player[]>([]);
 const usernameAtom = atomWithReset<string>("");
 const userDataAtom = atomWithReset<Player>({
@@ -61,140 +62,165 @@ export default function Home() {
     socket?.send(JSON.stringify(jsonData));
     setNowMessage("");
   };
-  useEffect(() => {
-    // if (WEBSOCKET_URL.length === 0) return;
-    // setUserList([]);
+
+  const setupWebSocket = () => {
     if (!socket) {
-      const sc = new WebSocket(WEBSOCKET_URL);
-      setSocket(sc);
+      const newSocket = new WebSocket(WEBSOCKET_URL);
+      setSocket(newSocket);
+
+      newSocket.onopen = () => {
+        console.log("connected!!");
+        sendEnterHuman(newSocket, userUUID);
+      };
+
+      newSocket.onmessage = handleWebSocketMessage;
+      newSocket.onclose = handleWebSocketClose;
 
       setIsConnected(true);
-      console.log(sc);
-      return;
     }
-    socket.onopen = () => {
-      console.log("connected!!");
+  };
 
-      const jsonData = {
-        action: "enter_human",
-        room_id: 0,
-        user: {
-          uuid: userUUID,
-          user_id: -1,
-          username: "",
-          role: "human",
-          is_online: true,
-        },
-        timestamp: Date.now(),
-        message: "",
-      };
-      socket.send(JSON.stringify(jsonData));
-    };
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("Action:", data.action);
-      switch (data.action) {
-        case "human_info":
-          console.log("human_info", data);
-          console.log("username:", username, userData.username);
-          console.log("userUUID:", userUUID);
-          console.log("data.user.uuid:", data.user.uuid);
-          setUserList(data.connected_users);
-          if (userUUID === data.user.uuid) {
-            setUserData(data.user);
-            setUsername(data.user.username);
+  const handleWebSocketMessage = (event: MessageEvent) => {
+    const data = JSON.parse(event.data);
+    console.log("Received action:", data.action);
+    switch (data.action) {
+      case "human_info":
+        console.log("human_info", data);
+        console.log("username:", username, userData.username);
+        console.log("userUUID:", userUUID);
+        console.log("data.user.uuid:", data.user.uuid);
+        setUserList(() => {
+          if (
+            userData.username.length !== 0 &&
+            data.user.uuid !== userData.uuid
+          )
+            return [
+              userData,
+              ...data.online_user_list.filter((user: Player) => {
+                return user.username !== userData.username;
+              }),
+            ];
+          if (!data.user) return [data.online_user_list];
+          return [
+            data.user,
+            ...data.online_user_list.filter((user: Player) => {
+              return user.username !== data.user.username;
+            }),
+          ];
+        });
+        if (userUUID === data.user.uuid) {
+          setUserData(data.user);
+          setUsername(data.user.username);
+        }
+        setChatLog((chatLog: Message[]) => {
+          const chat = {
+            message_id: data.message_id,
+            timestamp: data.timestamp,
+            user: data.user,
+            message: data.message,
+            message_type: data.message_type,
+          };
+          return [...chatLog, chat];
+        });
 
-            // send welcome message
-          }
-          setChatLog((chatLog: Chat) => {
-            return {
-              messages: [
-                ...chatLog.messages,
-                {
-                  id: data.id,
-                  timestamp: data.timestamp,
-                  sender: data.user.username,
-                  content: data.message,
-                },
-              ],
-            };
-          });
+        break;
+      case "user_list":
+        console.log("user_list", data.online_user_list);
 
-          break;
-        case "user_list":
-          console.log("user_list", data.connected_users);
-          setUserList(data.connected_users);
-          break;
-        case "message":
-          console.log("Message", data);
-          setChatLog((chatLog: Chat) => {
-            return {
-              messages: [
-                ...chatLog.messages,
-                {
-                  id: data.id,
-                  timestamp: data.timestamp,
-                  sender: data.user.username,
-                  content: data.message,
-                },
-              ],
-            };
-          });
-          break;
-        case "update_state":
-          console.log("update_state", data);
-          setUserList(data.connected_users);
-          setChatLog((chatLog: Chat) => {
-            return {
-              messages: [
-                ...chatLog.messages,
-                {
-                  id: data.id,
-                  timestamp: data.timestamp,
-                  sender: data.user.username,
-                  content: data.message,
-                },
-              ],
-            };
-          });
-          break;
-          break;
-      }
-    };
-    socket.onclose = () => {
-      const jsonData = { action: "left_user" };
-      socket?.send(JSON.stringify(jsonData));
-    };
-    return () => {
-      // const jsonData = { action: "left_user" };
-      // socket?.send(JSON.stringify(jsonData));
-      // console.log("clean up");
-      // socket?.close();
-    };
-  }, [chatLog, socket, userData, username]);
+        setUserList(() => {
+          if (!userData) return [data.online_user_list];
+          return [
+            userData,
+            ...data.online_user_list.filter((user: Player) => {
+              return user.username !== userData.username;
+            }),
+          ];
+        });
+        break;
+      case "new_message":
+        console.log("Message", data);
+        setChatLog((chatLog: Message[]) => {
+          const chat = {
+            message_id: data.message_id,
+            timestamp: data.timestamp,
+            user: data.user,
+            message: data.message,
+            message_type: data.message_type,
+          };
+          return [...chatLog, chat];
+        });
+
+        break;
+      case "update_state":
+        console.log("update_state", data);
+        setUserList(() => {
+          if (!userData) return [data.online_user_list];
+          return [
+            userData,
+            ...data.online_user_list.filter((user: Player) => {
+              return user.username !== userData.username;
+            }),
+          ];
+        });
+        setChatLog((chatLog: Message[]) => {
+          const chat = {
+            message_id: data.message_id,
+            timestamp: data.timestamp,
+            user: data.user,
+            message: data.message,
+            message_type: data.message_type,
+          };
+          return [...chatLog, chat];
+        });
+
+        break;
+    }
+  };
+
+  const handleWebSocketClose = () => {
+    console.log("WebSocket closed");
+    sendLeftUser(socket);
+  };
 
   useEffect(() => {
-    if (!socket) return;
+    // setupWebSocket();
+    // if (socket) return;
+    const sc = new WebSocket(WEBSOCKET_URL);
+    setSocket(sc);
+    setIsConnected(true);
+    return () => {
+      // console.log("clean up");
+      // sc?.close();
+    };
+  }, []);
+  useEffect(() => {
+    if (socket) {
+      socket.onopen = () => {
+        console.log("connected!!");
+        sendEnterHuman(socket, userUUID);
+      };
+      socket.onmessage = handleWebSocketMessage;
+      socket.onclose = handleWebSocketClose;
+    }
+  }, [socket, chatLog, userData, username]);
 
+  useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       console.log("Leaving");
-      const jsonData = { action: "left_user" };
-      socket?.send(JSON.stringify(jsonData));
-      // // Make sure to check if the socket is connected before trying to send
-      // if (socket && socket.readyState === WebSocket.OPEN) {
-      //   socket.send(JSON.stringify(jsonData));
+      sendLeftUser(socket);
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
-      const jsonData = { action: "left_user" };
-      socket?.send(JSON.stringify(jsonData));
       console.log("clean up");
-      socket?.close();
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [socket, userUUID]);
+
+  // useEffect(() => {
+  //   handleWebSocketMessage();
+  // }, [chatLog, socket, userData, username]);
 
   if (!isConnected) return <div>Connecting...</div>;
   return (
@@ -225,33 +251,70 @@ export default function Home() {
             <span className="text-blue-500">{userData.username}</span>
           </h3>
         )} */}
-
       <h3 className="my-4 font-bold text-xl">Chat Log</h3>
-      <ul className="w-96 max-w-1/2 h-80 border-2 border-gray-400 rounded-md overflow-y-scroll">
-        {chatLog.messages.length > 0 &&
-          chatLog.messages.map((message: Message, idx) => {
+      <ul className="overflow-y-scroll flex-1 my-4 ">
+        {chatLog.length > 0 &&
+          chatLog.map((message: Message, idx) => {
             return (
-              <li key={idx} className="">
-                <span
+              <li
+                key={idx}
+                className="flex py-0.5 pr-16 leading-[22px] hover:bg-gray-950/[.07]"
+              >
+                <div className="flex py-0.5 leading-[22px] hover:bg-gray-950/[.07]">
+                  <div className="overflow-hidden relative mt-0.5 mr-2 w-10 min-w-fit h-10 rounded-full">
+                    <Image
+                      src="/favicon.png"
+                      alt="discord"
+                      layout="fill"
+                      objectFit="contain"
+                    />
+                  </div>
+                  {/* <span
                   className="font-bold mr-2"
                   style={{
                     color:
-                      message.sender === userData.username
+                      message.user.username === userData.username
                         ? "#3b82f6"
                         : "black",
                   }}
-                >{`${message.sender}>`}</span>
-                <span>{message.content}</span>
+                >{`${message.user.username}>`}</span>
+                <span>{message.message}</span> */}
+                  <div>
+                    <p className="flex items-baseline">
+                      <span
+                        className="mr-2 font-bold text-green-400"
+                        style={{
+                          color:
+                            message.user.username === userData.username
+                              ? "#3b82f6"
+                              : "black",
+                        }}
+                      >
+                        {message.user.username}
+                      </span>
+                      <span className="text-xs font-medium text-gray-900">
+                        {getDayFromTimestamp(message.timestamp)}
+                      </span>
+                    </p>
+                    <p className="text-gray-900">{message.message}</p>
+                  </div>
+                </div>
               </li>
             );
           })}
       </ul>
-      <form className="flex flex-col" onSubmit={handleSendMessage}>
-        <label htmlFor="message">Message</label>
-        <div className="flex flex-row">
+      <form className="mt-4 flex flex-row" onSubmit={handleSendMessage}>
+        <label htmlFor="message">
           {userData.username && (
-            <span className="mr-2 font-bold">{`${userData.username}: `}</span>
+            <span
+              className="mr-2 font-bold"
+              // style={{
+              //   color: "#3b82f6",
+              // }}
+            >{`${userData.username}: `}</span>
           )}
+        </label>
+        <div className="flex flex-row">
           <input
             autoFocus
             className="border-2 border-gray-400 rounded-md w-fit-content"
@@ -262,6 +325,7 @@ export default function Home() {
           />
         </div>
       </form>
+      {/* discord */}
     </main>
   );
 }
