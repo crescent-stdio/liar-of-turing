@@ -22,6 +22,7 @@ func init() {
 	// 애플리케이션 시작 시 전역 변수 초기화
 	if err := utils.LoadNicknames(); err != nil {
 		fmt.Println("Error loading nicknames:", err)
+		return
 	}
 	nicknames = global.GetGlobalNicknames()
 }
@@ -31,11 +32,6 @@ var Broadcast = make(chan WsPayload)
 var clients = make(map[WebSocketConnection]User)
 
 var players = make(map[string]User)
-
-func Home(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-}
 
 // upgradeConnection is the websocket upgrader from gorilla/websockets
 var upgradeConnection = websocket.Upgrader{
@@ -49,6 +45,13 @@ type WebSocketConnection struct {
 	*websocket.Conn
 }
 
+// SafeClose closes the websocket connection safely
+func (conn *WebSocketConnection) SafeClose() {
+	if conn != nil && conn.Conn != nil {
+		conn.Close()
+	}
+}
+
 // WsJsonResponse defines the response sent back from websocket
 type WsJsonResponse struct {
 	Timestamp      int64  `json:"timestamp"`
@@ -56,16 +59,17 @@ type WsJsonResponse struct {
 	User           User   `json:"user"`
 	Message        string `json:"message"`
 	MessageType    string `json:"message_type"`
-	ConnectedUsers []User `json:"connected_users"`
+	OnlineUserList []User `json:"online_user_list"`
 }
 
 type User struct {
 	UUID       string `json:"uuid"`
 	UserId     int64  `json:"user_id"`
+	RoomId     int64  `json:"room_id"`
 	NicknameId int    `json:"nickname_id"`
 	UserName   string `json:"username"`
 	Role       string `json:"role"`
-	isOnline   bool   `json:"is_online"`
+	IsOnline   bool   `json:"is_online"`
 }
 
 func sortUserList(users []User) []User {
@@ -87,153 +91,147 @@ type WsPayload struct {
 
 // WsEndpoint upgrades connection to websocket
 func WsEndpoint(w http.ResponseWriter, r *http.Request) {
-
-	// nicknames, err := services.LoadNicknames()
-	// if err != nil {
-	// 	fmt.Println("Error:", err)
-	// 	return
-	// }
-
 	ws, err := upgradeConnection.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		log.Println("Error upgrading to WebSocket:", err)
+		return
 	}
 
+	conn := WebSocketConnection{Conn: ws}
 	log.Println("Client connected to endpoint")
 
-	// var response WsJsonResponse
-	// response.Action = "Connected"
-	// response.Message = "Connected to server"
-	// response.MessageType = "server"
-
-	conn := WebSocketConnection{Conn: ws}
-	// clients[conn] = User{UserName: "server", Role: "server", UserId: 0}
-	// log.Println(clients)
-
-	// err = ws.WriteJSON(response)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
 	go ListenForWs(&conn)
 }
 
 func ListenForWs(conn *WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("Error", r)
+			log.Println("Recovered in ListenForWs:", r)
 		}
-		conn.Close()           // Ensure the connection is closed
-		delete(clients, *conn) // Remove the client from the ma
+		conn.SafeClose() // Safely close the connection
+		mutex.Lock()
+		delete(clients, *conn) // Remove the client from the map
+		mutex.Unlock()
 	}()
 
 	var payload WsPayload
 
 	for {
 		err := conn.ReadJSON(&payload)
-		log.Println("ListenForWs")
-		log.Println(payload)
-		log.Println("err:", err)
 		if err != nil {
-			log.Println("Error reading json:", err)
-			break // Exit loop on error
-		} else {
-			payload.Conn = *conn
-			Broadcast <- payload
+			// Check if the error is a normal WebSocket closure
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+				log.Printf("Client disconnected: %v\n", err)
+			} else {
+				log.Printf("Error reading json: %v\n", err)
+			}
+			break // Exit loop on client disconnection or error
 		}
-	}
 
+		payload.Conn = *conn
+		Broadcast <- payload
+	}
 }
 
 func ListenToWsChannel() {
 	var response WsJsonResponse
 	for {
-		log.Println("Got here!!")
 		e := <-Broadcast
-		log.Println("Got here")
-		log.Println("e.User:", e.User)
+
+		// Consolidated logging
+		log.Printf("Action: %s, User: %v\n", e.Action, e.User)
+
 		mutex.Lock()
 		switch e.Action {
-		case "new_message":
-			response.Timestamp = e.Timestamp
-			response.Action = "message"
-			response.User = e.User
-			response.Message = e.Message
-			log.Println(response.Message)
-			response.MessageType = "message"
-			broadcastToAll(response)
-		case "list_users":
-			response.Timestamp = e.Timestamp
-			response.Action = "user_list"
-			response.MessageType = "info"
-			users := getUserList()
-			response.ConnectedUsers = users
-			broadcastToAll(response)
-		case "enter_human":
-			// clients[e.Conn] = e.User
-			nowUser := findUser(e.User.UUID)
-			if nowUser == (User{}) {
-				nicknameId, userName := getRandomUsername()
-				nowUser = User{
-					UserId:     int64(len(clients)),
-					UserName:   userName,
-					NicknameId: nicknameId,
-					Role:       "human",
-					UUID:       e.User.UUID,
-					isOnline:   true,
-				}
-				players[e.User.UUID] = nowUser
+		case "new_message", "broadcast":
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         e.Action,
+				User:           e.User,
+				Message:        e.Message,
+				MessageType:    "message",
+				OnlineUserList: getUserList(),
 			}
-			log.Println("enter_human")
-			clients[e.Conn] = nowUser
-			log.Println(clients)
-			log.Println("e.User:", e.User)
-			log.Println("nowUser:", nowUser)
-			// e.User = nowUser
-			response.Action = "human_info"
-			response.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
-			response.MessageType = "info"
-			response.User = nowUser
-			users := getUserList()
-			response.ConnectedUsers = users
-			broadcastToAll(response)
+
+		case "list_users":
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "user_list",
+				MessageType:    "info",
+				OnlineUserList: getUserList(),
+			}
+
+		case "enter_human":
+			processEnterHuman(e, &response)
 
 		case "left_user":
-			log.Println("left_user")
-			// response.Action = "update_state"
+			processLeftUser(e, &response)
 
-			leftUser := clients[e.Conn]
-			leftUser.isOnline = false
-			players[e.User.UUID] = leftUser
-
-			delete(clients, e.Conn)
-			// response.Message = fmt.Sprintf("%s님이 퇴장했습니다.", leftUser.UserName)
-			response.Action = "user_list"
-			users := getUserList()
-			log.Println(users)
-			response.ConnectedUsers = users
-			broadcastToAll(response)
-		case "broadcast":
-			response.Action = "broadcast"
-			response.Message = fmt.Sprintf("%s: %s", e.User.UserName, e.Message)
-			response.MessageType = "message"
-			broadcastToAll(response)
-
+		default:
+			log.Printf("Unknown action: %s\n", e.Action)
 		}
-		// clients[e.Conn] = e.Username
-
-		// response.Action = "Got your message"
-		// response.Message = fmt.Sprintf("Someone sent a message and Action is %s", e.Action)
-		// response.MessageType = "info"
-		// broadcastToAll(response)
+		log.Println("users:", getUserList())
+		if response.Action != "" {
+			broadcastToAll(response)
+		}
 		mutex.Unlock()
 	}
+}
 
+func processEnterHuman(e WsPayload, response *WsJsonResponse) {
+	nowUser, exists := players[e.User.UUID]
+	if !exists {
+		nicknameId, userName := getRandomUsername()
+		nowUser = User{
+			UserId:     int64(len(clients)),
+			UserName:   userName,
+			NicknameId: nicknameId,
+			Role:       "human",
+			UUID:       e.User.UUID,
+			IsOnline:   true,
+		}
+		// players[e.User.UUID] = nowUser
+	}
+	nowUser.IsOnline = true
+	players[e.User.UUID] = nowUser
+	clients[e.Conn] = nowUser
+
+	*response = WsJsonResponse{
+		Timestamp:      e.Timestamp,
+		Action:         "human_info",
+		MessageType:    "info",
+		Message:        fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName),
+		User:           nowUser,
+		OnlineUserList: getUserList(),
+	}
+}
+
+func processLeftUser(e WsPayload, response *WsJsonResponse) {
+	if leftUser, ok := clients[e.Conn]; ok {
+		leftUser.IsOnline = false
+		players[e.User.UUID] = leftUser
+
+		delete(clients, e.Conn)
+		e.Conn.SafeClose()
+
+		*response = WsJsonResponse{
+			Action:         "user_list",
+			OnlineUserList: getUserList(),
+		}
+	} else {
+		log.Println("User not found in clients map")
+		// *response = WsJsonResponse{} // Empty response
+		*response = WsJsonResponse{
+			Action:         "user_list",
+			OnlineUserList: getUserList(),
+		}
+	}
 }
 
 func getUserList() []User {
 	var userList []User
 	for _, v := range clients {
-		if v.UserName != "server" && v.isOnline {
+		if v.UserName != "server" && v.IsOnline {
 			userList = append(userList, v)
 		}
 	}
@@ -242,14 +240,17 @@ func getUserList() []User {
 }
 
 func broadcastToAll(response WsJsonResponse) {
+	// mutex.Lock()
+	// defer mutex.Unlock()
+
 	for client := range clients {
-		err := client.WriteJSON(response)
-		if err != nil {
-			log.Println("Websocket error", err)
-			_ = client.Close()
+		if err := client.WriteJSON(response); err != nil {
+			log.Println("[broadcastToAll] Websocket error:", err)
+			client.SafeClose()
 			delete(clients, client)
 		}
 	}
+	log.Println("Broadcasted message")
 }
 
 func getRandomUsername() (int, string) {
@@ -271,7 +272,7 @@ func findUser(uuid string) User {
 		if v.UUID == uuid {
 			log.Println("dddddddddd")
 			log.Println("v:", v)
-			v.isOnline = true
+			v.IsOnline = true
 			return v
 		}
 	}
