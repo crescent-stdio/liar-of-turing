@@ -1,6 +1,7 @@
 package models
 
 type Nickname struct {
-	Nickname string `json:"Nickname"`
+	Id       int    `json:"id"`
+	Nickname string `json:"nickname"`
 	IsUsed   bool   `json:"IsUsed"`
 }

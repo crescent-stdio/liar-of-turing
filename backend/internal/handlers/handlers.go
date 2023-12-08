@@ -193,13 +193,14 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 		// players[e.User.UUID] = nowUser
 	}
 	nowUser.IsOnline = true
+	log.Println(nowUser.NicknameId)
 	players[e.User.UUID] = nowUser
 	clients[e.Conn] = nowUser
 
 	*response = WsJsonResponse{
 		Timestamp:      e.Timestamp,
 		Action:         "human_info",
-		MessageType:    "info",
+		MessageType:    "system",
 		Message:        fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName),
 		User:           nowUser,
 		OnlineUserList: getUserList(),
@@ -230,7 +231,7 @@ func processLeftUser(e WsPayload, response *WsJsonResponse) {
 
 func getUserList() []User {
 	var userList []User
-	for _, v := range clients {
+	for _, v := range players { //TODO:  or clients?
 		if v.UserName != "server" && v.IsOnline {
 			userList = append(userList, v)
 		}
@@ -255,26 +256,27 @@ func broadcastToAll(response WsJsonResponse) {
 
 func getRandomUsername() (int, string) {
 	//random suffle nicknames and return not used nickname
-	rand.Seed(time.Now().UnixNano())
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	perm := rand.Perm(len(nicknames))
-	for idx, v := range perm {
+	for _, v := range perm {
 		if !nicknames[v].IsUsed {
 			nicknames[v].IsUsed = true
-			return idx, nicknames[v].Nickname
+			log.Println("nickname,", nicknames[v])
+			return nicknames[v].Id, nicknames[v].Nickname
 		}
 	}
 	return -1, ""
 }
 
-func findUser(uuid string) User {
-	for _, v := range players {
-		log.Println("v.UUID:", v.UUID)
-		if v.UUID == uuid {
-			log.Println("dddddddddd")
-			log.Println("v:", v)
-			v.IsOnline = true
-			return v
-		}
-	}
-	return User{}
-}
+// func findUser(uuid string) User {
+// 	for _, v := range players {
+// 		log.Println("v.UUID:", v.UUID)
+// 		if v.UUID == uuid {
+// 			log.Println("dddddddddd")
+// 			log.Println("v:", v)
+// 			v.IsOnline = true
+// 			return v
+// 		}
+// 	}
+// 	return User{}
+// }
