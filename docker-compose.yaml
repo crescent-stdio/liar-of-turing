@@ -5,6 +5,7 @@ services:
       - go-server
     ports:
       - "80:3000"
+      - "443:443"
     env_file:
       - ./web-application/.env
     build: ./web-application
@@ -12,6 +13,7 @@ services:
   go-server:
     ports:
       - "8080:8080"
+      - "8443:8443"
     env_file:
       - ./go-server/.env
     build: ./go-server

@@ -11,8 +11,10 @@ cp.out
 *.out
 
 tmp
+etc
 
 *.env
 
 # MacOS
 .DS_Store
+
