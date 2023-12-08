@@ -75,11 +75,15 @@ func main() {
 		Addr:    URL,
 		Handler: c.Handler(mux),
 	}
-	err = server.ListenAndServe()
+
+	// SSL/TLS certificate
+	// err = server.ListenAndServe() // for local testing
+	err = server.ListenAndServeTLS("../cert.pem", "../key.pem") // for production
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("ListenAndServeTLS: ", err)
 	}
+
 }
 
 func routes() http.Handler {
