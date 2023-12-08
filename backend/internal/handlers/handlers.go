@@ -231,7 +231,7 @@ func processLeftUser(e WsPayload, response *WsJsonResponse) {
 
 func getUserList() []User {
 	var userList []User
-	for _, v := range clients {
+	for _, v := range players { //TODO:  or clients?
 		if v.UserName != "server" && v.IsOnline {
 			userList = append(userList, v)
 		}

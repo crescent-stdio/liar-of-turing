@@ -122,6 +122,8 @@ export default function Home() {
         console.log("userUUID:", userUUID);
         console.log("data.user.uuid:", data.user.uuid);
         setUserList(() => {
+          if (!data.online_user_list) return [];
+
           if (
             userData.username.length !== 0 &&
             data.user.uuid !== userData.uuid
@@ -160,11 +162,22 @@ export default function Home() {
         console.log("user_list", data.online_user_list);
 
         setUserList(() => {
-          if (!userData) return [data.online_user_list];
+          if (!data.online_user_list) return [];
+          if (
+            userData.username.length !== 0 &&
+            data.user.uuid !== userData.uuid
+          )
+            return [
+              userData,
+              ...data.online_user_list.filter((user: Player) => {
+                return user.username !== userData.username;
+              }),
+            ];
+          if (!data.user) return [data.online_user_list];
           return [
-            userData,
+            data.user,
             ...data.online_user_list.filter((user: Player) => {
-              return user.username !== userData.username;
+              return user.username !== data.user.username;
             }),
           ];
         });
@@ -186,11 +199,22 @@ export default function Home() {
       case "update_state":
         console.log("update_state", data);
         setUserList(() => {
-          if (!userData) return [data.online_user_list];
+          if (!data.online_user_list) return [];
+          if (
+            userData.username.length !== 0 &&
+            data.user.uuid !== userData.uuid
+          )
+            return [
+              userData,
+              ...data.online_user_list.filter((user: Player) => {
+                return user.username !== userData.username;
+              }),
+            ];
+          if (!data.user) return [data.online_user_list];
           return [
-            userData,
+            data.user,
             ...data.online_user_list.filter((user: Player) => {
-              return user.username !== userData.username;
+              return user.username !== data.user.username;
             }),
           ];
         });
@@ -325,7 +349,7 @@ export default function Home() {
         <div className="flex flex-col flex-1">
           <h3 className="mt-6 font-bold text-xl">Chat Log</h3>
           <ul
-            className="overflow-y-scroll min-h-[50vh] max-h-[50vh] my-4 flex-1"
+            className="overflow-y-scroll min-h-[60vh] max-h-[60vh] my-4 flex-1"
             id="chatLog"
           >
             {chatLog.length > 0 &&
