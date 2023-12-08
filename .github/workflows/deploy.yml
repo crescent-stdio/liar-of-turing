@@ -1,0 +1,22 @@
+name: Deploy to AWS EC2
+on:
+  push:
+    branches: [main]
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: executing remote ssh commands using ssh key
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.REMOTE_HOST_IP }}
+          username: ${{ secrets.REMOTE_HOST_USERNAME }}
+          key: ${{ secrets.REMOTE_HOST_SSH_KEY }}
+          # port: ${{ secrets.REMOTE_HOST_PORT }}
+          script: |
+            cd liarOfTuring
+            git pull
+            docker-compose down
+            docker-compose up -d --build
