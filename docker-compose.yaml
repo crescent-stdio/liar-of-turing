@@ -4,7 +4,7 @@ services:
     depends_on:
       - go-server
     ports:
-      - "443:3000"
+      - "3000:3000"
     env_file:
       - ./web-application/.env
     build: ./web-application
@@ -16,6 +16,13 @@ services:
       - ./go-server/.env
     build: ./go-server
     restart: always
+  nginx:
+    dockerfile: ./nginx.Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
 
     # tty: true
     # command: tail -F anything

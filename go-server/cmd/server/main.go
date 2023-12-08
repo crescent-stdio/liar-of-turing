@@ -77,8 +77,8 @@ func main() {
 	}
 
 	// SSL/TLS certificate
-	// err = server.ListenAndServe() // for local testing
-	err = server.ListenAndServeTLS("./cert.pem", "./key.pem") // for production
+	err = server.ListenAndServe() // for local testing
+	// err = server.ListenAndServeTLS("./cert.pem", "./key.pem") // for production
 
 	if err != nil {
 		log.Fatal("ListenAndServeTLS: ", err)
