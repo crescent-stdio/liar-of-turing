@@ -14,6 +14,7 @@ tmp
 etc
 
 *.env
+*.pem
 
 # MacOS
 .DS_Store
