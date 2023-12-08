@@ -19,7 +19,7 @@ jobs:
           # port: ${{ secrets.REMOTE_HOST_PORT }}
           script: |
             cd liarOfTuring
-            git config remote.origin.url https:// ${ secrets.ACCESS_TOKEN } @github.com/ ${ secrets.GITHUB_USERNAME } /liar-of-turing
+            git config remote.origin.url https://${{ secrets.ACCESS_TOKEN }}@github.com/${{ secrets.GITHUB_USERNAME }}/liar-of-turing
             git pull origin main
             docker-compose down
             docker-compose up -d --build
