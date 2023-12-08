@@ -1,4 +1,4 @@
-FROM nginx:1.25.3-alpine as base
+FROM nginx:latest as base
 
 COPY ./nginx.conf /etc/nginx/nginx.conf
 COPY ./cert.pem /ssl/cert.pem
