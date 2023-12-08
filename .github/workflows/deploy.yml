@@ -23,7 +23,7 @@ jobs:
             git pull origin main
             docker-compose down
             docker-compose up -d --build
-      - env:
+        env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           REPO_USERNAME: ${{ secrets.REPO_USERNAME }}
           REPO_USER: ${{ secrets.REPO_USER }}
