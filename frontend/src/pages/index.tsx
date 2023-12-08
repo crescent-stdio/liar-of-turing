@@ -26,7 +26,9 @@ const userDataAtom = atomWithReset<Player>({
   username: "",
   role: "",
 });
-
+const timerTimeAtom = atomWithReset<number>(0);
+const timerIsRunningAtom = atomWithReset<boolean>(false);
+const timerIsPausedAtom = atomWithReset<boolean>(false);
 let userUUID: string = getUserUUID();
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL
   ? process.env.NEXT_PUBLIC_WEBSOCKET_URL
@@ -43,6 +45,14 @@ export default function Home() {
   const [inputUsername, setInputUsername] = useState<string>("");
   const [userList, setUserList] = useAtom(userListAtom);
   const [socket, setSocket] = useState<WebSocket | null>(null);
+
+  const [timerTime, setTimerTime] = useAtom(timerTimeAtom);
+  const [timerIsRunning, setTimerIsRunning] = useAtom(timerIsRunningAtom);
+  const [timerIsPaused, setTimerIsPaused] = useAtom(timerIsPausedAtom);
+
+  // for test
+  const [testUsername, setTestUsername] = useState<string>("");
+  const [testMessage, setTestMessage] = useState<string>("");
 
   const handleChangeMessage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setNowMessage(event.target.value);
@@ -63,21 +73,29 @@ export default function Home() {
     setNowMessage("");
   };
 
-  const setupWebSocket = () => {
-    if (!socket) {
-      const newSocket = new WebSocket(WEBSOCKET_URL);
-      setSocket(newSocket);
+  const handleChangeTestMessage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setTestMessage(event.target.value);
+  };
 
-      newSocket.onopen = () => {
-        console.log("connected!!");
-        sendEnterHuman(newSocket, userUUID);
-      };
+  const handleTestSendMessage = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const message = event.currentTarget.message.value.trim();
+    if (message.length === 0) return;
 
-      newSocket.onmessage = handleWebSocketMessage;
-      newSocket.onclose = handleWebSocketClose;
-
-      setIsConnected(true);
-    }
+    const sendUser = userList.find((user: Player) => {
+      return user.username === testUsername;
+    });
+    if (!sendUser) return;
+    const jsonData = {
+      action: "new_message",
+      room_id: 0,
+      user: sendUser,
+      timestamp: Date.now(),
+      message: message,
+    };
+    socket?.send(JSON.stringify(jsonData));
   };
 
   const handleWebSocketMessage = (event: MessageEvent) => {
@@ -224,108 +242,133 @@ export default function Home() {
 
   if (!isConnected) return <div>Connecting...</div>;
   return (
-    <main className={`m-4 ${inter.className}`}>
-      <h1 className="text-3xl font-bold">Liars of Turing</h1>
-      <div className="flex flex-col">
-        <h3 className="mb-2 font-bold text-xl">Now connected users</h3>
-        {userList &&
-          userList.length > 0 &&
-          userList.map((user: Player, index) => {
-            return (
-              <p
-                key={index}
-                style={{
-                  color:
-                    user.username === userData.username ? "#3b82f6" : "black",
-                  fontWeight: user.username === userData.username ? 700 : 400,
-                }}
-              >
-                {user.username}
-              </p>
-            );
-          })}
+    <main
+      className={`py-8 mx-auto ${inter.className} w-[80vw] max-w-2xl min-h-max`}
+    >
+      <h1 className="text-3xl font-bold">Liar of Turing</h1>
+      <div className="flex flex-row-reverse justify-between">
+        <div className="flex flex-col ml-4">
+          <h3 className="mt-6 font-bold text-xl">Now online</h3>
+          <ul className="my-4 h-80 flex-1">
+            {userList &&
+              userList.length > 0 &&
+              userList.map((user: Player, index) => {
+                return (
+                  <li
+                    key={index}
+                    style={{
+                      color:
+                        user.username === userData.username
+                          ? "#3b82f6"
+                          : "black",
+                      fontWeight:
+                        user.username === userData.username ? 700 : 400,
+                    }}
+                  >
+                    {user.username}
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
+        <div className="flex flex-col flex-1">
+          <h3 className="mt-6 font-bold text-xl">Chat Log</h3>
+          <ul className="overflow-y-scroll min-h-[50vh] max-h-[50vh] my-4 flex-1">
+            {chatLog.length > 0 &&
+              chatLog.map((message: Message, idx) => {
+                return (
+                  <li key={idx} className="flex py-0.5 pr-16 leading-[22px]">
+                    <div className="flex py-0.5 leading-[22px]">
+                      <div className="overflow-hidden relative mt-0.5 mr-2 w-10 min-w-fit h-10 rounded-sm">
+                        <Image
+                          src={`/nickname_icon/${message.user.nickname_id}.png`}
+                          alt={`${message.user.username} icon`}
+                          layout="fill"
+                          objectFit="contain"
+                        />
+                      </div>
+                      <div>
+                        <p className="flex items-baseline">
+                          <span
+                            className="mr-2 font-bold text-green-400"
+                            style={{
+                              color:
+                                message.user.username === userData.username
+                                  ? "#3b82f6"
+                                  : "black",
+                            }}
+                          >
+                            {message.user.username}
+                          </span>
+                          <span className="text-xs font-medium text-gray-900">
+                            {getDayFromTimestamp(message.timestamp)}
+                          </span>
+                        </p>
+                        <p className="text-gray-900">{message.message}</p>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
       </div>
-      {/* {userData.username && (
-          <h3 className="my-4 font-bold text-xl">
-            {`Now your name: `}
-            <span className="text-blue-500">{userData.username}</span>
-          </h3>
-        )} */}
-      <h3 className="my-4 font-bold text-xl">Chat Log</h3>
-      <ul className="overflow-y-scroll flex-1 my-4 ">
-        {chatLog.length > 0 &&
-          chatLog.map((message: Message, idx) => {
-            return (
-              <li
-                key={idx}
-                className="flex py-0.5 pr-16 leading-[22px] hover:bg-gray-950/[.07]"
-              >
-                <div className="flex py-0.5 leading-[22px] hover:bg-gray-950/[.07]">
-                  <div className="overflow-hidden relative mt-0.5 mr-2 w-10 min-w-fit h-10 rounded-full">
-                    <Image
-                      src="/favicon.png"
-                      alt="discord"
-                      layout="fill"
-                      objectFit="contain"
-                    />
-                  </div>
-                  {/* <span
-                  className="font-bold mr-2"
-                  style={{
-                    color:
-                      message.user.username === userData.username
-                        ? "#3b82f6"
-                        : "black",
-                  }}
-                >{`${message.user.username}>`}</span>
-                <span>{message.message}</span> */}
-                  <div>
-                    <p className="flex items-baseline">
-                      <span
-                        className="mr-2 font-bold text-green-400"
-                        style={{
-                          color:
-                            message.user.username === userData.username
-                              ? "#3b82f6"
-                              : "black",
-                        }}
-                      >
-                        {message.user.username}
-                      </span>
-                      <span className="text-xs font-medium text-gray-900">
-                        {getDayFromTimestamp(message.timestamp)}
-                      </span>
-                    </p>
-                    <p className="text-gray-900">{message.message}</p>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-      </ul>
-      <form className="mt-4 flex flex-row" onSubmit={handleSendMessage}>
-        <label htmlFor="message">
-          {userData.username && (
-            <span
-              className="mr-2 font-bold"
-              // style={{
-              //   color: "#3b82f6",
-              // }}
-            >{`${userData.username}: `}</span>
-          )}
-        </label>
-        <div className="flex flex-row">
+      {userData.username && (
+        <form className="mt-4 flex flex-row" onSubmit={handleSendMessage}>
+          <label htmlFor="message">
+            {userData.username && (
+              <span
+                className="mr-2 font-bold flex-1"
+                style={{
+                  color: "#3b82f6",
+                }}
+              >{`${userData.username}: `}</span>
+            )}
+          </label>
           <input
             autoFocus
-            className="border-2 border-gray-400 rounded-md w-fit-content"
+            className="border-2 border-gray-400 rounded-md flex-1"
             type="text"
             id="message"
             value={nowMessage}
             onChange={handleChangeMessage}
           />
-        </div>
-      </form>
-      {/* discord */}
+        </form>
+      )}
+
+      {/* for test */}
+      {/* <div className="my-80"></div>
+      <form className="flex flex-row" onSubmit={handleTestSendMessage}>
+        <label htmlFor="username">Username</label>
+        <select
+          name="username"
+          id="username"
+          onChange={(e) => {
+            setTestUsername(e.target.value);
+          }}
+          className="border-2 border-gray-400 rounded-md w-fit-content"
+        >
+          {userList &&
+            userList.length > 0 &&
+            userList.map((user: Player, index) => {
+              return (
+                <option key={index} value={user.username}>
+                  {user.username}
+                </option>
+              );
+            })}
+        </select>
+        <label htmlFor="message" className="mx-2 ">
+          Message
+        </label>
+        <input
+          className="border-2 border-gray-400 rounded-md w-fit-content"
+          type="text"
+          id="message"
+          value={testMessage}
+          onChange={handleChangeTestMessage}
+        />
+      </form> */}
     </main>
   );
 }

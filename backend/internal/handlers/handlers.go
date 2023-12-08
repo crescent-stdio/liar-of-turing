@@ -193,6 +193,7 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 		// players[e.User.UUID] = nowUser
 	}
 	nowUser.IsOnline = true
+	log.Println(nowUser.NicknameId)
 	players[e.User.UUID] = nowUser
 	clients[e.Conn] = nowUser
 
@@ -257,10 +258,11 @@ func getRandomUsername() (int, string) {
 	//random suffle nicknames and return not used nickname
 	rand.Seed(time.Now().UnixNano())
 	perm := rand.Perm(len(nicknames))
-	for idx, v := range perm {
+	for _, v := range perm {
 		if !nicknames[v].IsUsed {
 			nicknames[v].IsUsed = true
-			return idx, nicknames[v].Nickname
+			log.Println("nickname,", nicknames[v])
+			return nicknames[v].Id, nicknames[v].Nickname
 		}
 	}
 	return -1, ""
