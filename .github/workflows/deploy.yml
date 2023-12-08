@@ -8,7 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: executing remote ssh commands using ssh key
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+      - name: Deploy using ssh key 🔑
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.REMOTE_HOST_IP }}
