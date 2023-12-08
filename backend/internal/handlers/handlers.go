@@ -268,15 +268,15 @@ func getRandomUsername() (int, string) {
 	return -1, ""
 }
 
-func findUser(uuid string) User {
-	for _, v := range players {
-		log.Println("v.UUID:", v.UUID)
-		if v.UUID == uuid {
-			log.Println("dddddddddd")
-			log.Println("v:", v)
-			v.IsOnline = true
-			return v
-		}
-	}
-	return User{}
-}
+// func findUser(uuid string) User {
+// 	for _, v := range players {
+// 		log.Println("v.UUID:", v.UUID)
+// 		if v.UUID == uuid {
+// 			log.Println("dddddddddd")
+// 			log.Println("v:", v)
+// 			v.IsOnline = true
+// 			return v
+// 		}
+// 	}
+// 	return User{}
+// }

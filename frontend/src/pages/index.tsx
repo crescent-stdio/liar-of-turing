@@ -10,9 +10,18 @@ import { getUserUUID } from "@/utils/liarHelper";
 import { WsJsonRequest, WsJsonResponse } from "@/types/wsTypes";
 import { sendEnterHuman, sendLeftUser } from "@/utils/weHelper";
 import * as datetime from "date-fns";
+import { time } from "console";
+import { TIMER_TIME } from "@/store/gameStore";
 
 const getDayFromTimestamp = (timestamp: number): string => {
   return datetime.format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss");
+};
+const getTimeFromTimer = (time: number): string => {
+  //using date-fns ans 10:00
+  const date = new Date(time * 1000);
+  let minutes = (date.getMinutes() < 10 ? "0" : "") + date.getMinutes();
+  let seconds = (date.getSeconds() < 10 ? "0" : "") + date.getSeconds();
+  return `${minutes}:${seconds}`;
 };
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,6 +38,7 @@ const userDataAtom = atomWithReset<Player>({
 const timerTimeAtom = atomWithReset<number>(0);
 const timerIsRunningAtom = atomWithReset<boolean>(false);
 const timerIsPausedAtom = atomWithReset<boolean>(false);
+const isGameStartedAtom = atomWithReset<boolean>(false);
 let userUUID: string = getUserUUID();
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL
   ? process.env.NEXT_PUBLIC_WEBSOCKET_URL
@@ -49,6 +59,7 @@ export default function Home() {
   const [timerTime, setTimerTime] = useAtom(timerTimeAtom);
   const [timerIsRunning, setTimerIsRunning] = useAtom(timerIsRunningAtom);
   const [timerIsPaused, setTimerIsPaused] = useAtom(timerIsPausedAtom);
+  const [isGameStarted, setIsGameStarted] = useAtom(isGameStartedAtom);
 
   // for test
   const [testUsername, setTestUsername] = useState<string>("");
@@ -240,12 +251,43 @@ export default function Home() {
   //   handleWebSocketMessage();
   // }, [chatLog, socket, userData, username]);
 
+  useEffect(() => {
+    if (timerTime === 0) {
+      setTimerIsRunning(false);
+      setTimerIsPaused(false);
+    }
+  }, [timerTime]);
+  useEffect(() => {
+    if (!timerIsRunning) return;
+    const interval = setInterval(() => {
+      setTimerTime((timerTime) => timerTime - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timerIsRunning]);
+
   if (!isConnected) return <div>Connecting...</div>;
   return (
     <main
       className={`py-8 mx-auto ${inter.className} w-[80vw] max-w-2xl min-h-max`}
     >
-      <h1 className="text-3xl font-bold">Liar of Turing</h1>
+      <div className="flex flex-row justify-between">
+        <h1 className="text-3xl font-bold">Liar of Turing</h1>
+        <div className="flex flex-row">
+          <div className="text-center text-xl font-medium mx-2 text-gray-900">
+            {getTimeFromTimer(timerTime)}
+          </div>
+          <button
+            className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-md"
+            onClick={() => {
+              setTimerTime(TIMER_TIME);
+              setTimerIsRunning(true);
+              if (!isGameStarted) setIsGameStarted(true);
+            }}
+          >
+            Start
+          </button>
+        </div>
+      </div>
       <div className="flex flex-row-reverse justify-between">
         <div className="flex flex-col ml-4">
           <h3 className="mt-6 font-bold text-xl">Now online</h3>
@@ -335,9 +377,46 @@ export default function Home() {
           />
         </form>
       )}
+      {isGameStarted && timerTime === 0 && (
+        <div className="flex flex-col">
+          <h3 className="mt-6 font-bold text-xl">Choose AI</h3>
+          <form className="flex flex-row" onSubmit={handleTestSendMessage}>
+            <label htmlFor="ai">{`I think the AI is.. `}</label>
+            <select
+              name="ai"
+              id="ai"
+              onChange={(e) => {
+                setTestUsername(e.target.value);
+              }}
+              className="border-2 border-gray-400 rounded-md w-fit-content"
+            >
+              {userList &&
+                userList.length > 0 &&
+                userList.map((user: Player, index) => {
+                  return (
+                    <option key={index} value={user.username}>
+                      {user.username}
+                    </option>
+                  );
+                })}
+            </select>
+            <label htmlFor="reason" className="mx-2 ">
+              Reason
+            </label>
+            <input
+              className="border-2 border-gray-400 rounded-md w-fit-content"
+              type="text"
+              id="reason"
+              value={testMessage}
+              onChange={handleChangeTestMessage}
+            />
+          </form>
+        </div>
+      )}
 
       {/* for test */}
-      {/* <div className="my-80"></div>
+      <div className="my-80"></div>
+
       <form className="flex flex-row" onSubmit={handleTestSendMessage}>
         <label htmlFor="username">Username</label>
         <select
@@ -368,7 +447,7 @@ export default function Home() {
           value={testMessage}
           onChange={handleChangeTestMessage}
         />
-      </form> */}
+      </form>
     </main>
   );
 }
