@@ -14,6 +14,7 @@ COPY . .
 
 ENV PORT 8443
 ENV HOSTNAME "0.0.0.0"
+EXPOSE 8443
 
 CMD ["air", "-c", ".air.toml"]
 
