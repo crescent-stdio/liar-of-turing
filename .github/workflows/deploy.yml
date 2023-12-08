@@ -17,6 +17,6 @@ jobs:
           # port: ${{ secrets.REMOTE_HOST_PORT }}
           script: |
             cd liarOfTuring
-            git pull
+            git pull origin main
             docker-compose down
             docker-compose up -d --build
