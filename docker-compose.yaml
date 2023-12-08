@@ -1,26 +1,26 @@
 version: "3.8"
 services:
-  frontend:
+  web-application:
     depends_on:
-      - backend
+      - go-server
     ports:
       - "80:3000"
     env_file:
-      - ./frontend/.env
-    build: ./frontend
+      - ./web-application/.env
+    build: ./web-application
     restart: always
-  backend:
+  go-server:
     ports:
       - "8080:8080"
     env_file:
-      - ./backend/.env
-    build: ./backend
+      - ./go-server/.env
+    build: ./go-server
     restart: always
 
     # tty: true
     # command: tail -F anything
 
     # volumes:
-    #   - ./backend:/app
+    #   - ./go-server:/app
     # depends_on:
     #   - db
