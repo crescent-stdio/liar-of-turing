@@ -17,12 +17,13 @@ services:
     build: ./go-server
     restart: always
   nginx:
-    dockerfile: ./nginx.Dockerfile
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
+    build:
+      dockerfile: ./nginx.Dockerfile
 
     # tty: true
     # command: tail -F anything

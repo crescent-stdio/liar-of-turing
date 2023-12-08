@@ -1,7 +1,9 @@
 name: Deploy to AWS EC2
+
 on:
   push:
     branches: [main, deploy/*]
+
 jobs:
   build-and-deploy:
     name: Build and Deploy
@@ -10,6 +12,10 @@ jobs:
     steps:
       - name: Checkout 🛎️
         uses: actions/checkout@v4
+
+      - name: Extract branch name 🌱
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
+
       - name: Deploy using ssh key 🔑
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -19,7 +25,11 @@ jobs:
           # port: ${{ secrets.REMOTE_HOST_PORT }}
           script: |
             cd liarOfTuring
-            git pull origin main
+            git fetch --all
+            git checkout $BRANCH_NAME
+            git pull origin $BRANCH_NAME
             docker-compose down
             docker-compose build
             docker-compose up -d
+        env:
+          BRANCH_NAME: ${{ env.BRANCH_NAME }}
