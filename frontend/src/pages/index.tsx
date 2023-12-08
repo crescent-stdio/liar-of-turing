@@ -43,6 +43,8 @@ let userUUID: string = getUserUUID();
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL
   ? process.env.NEXT_PUBLIC_WEBSOCKET_URL
   : "";
+
+const isDebugModeAtom = atomWithReset<boolean>(false);
 export default function Home() {
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [count, setCount] = useState<number>(0);
@@ -64,6 +66,7 @@ export default function Home() {
   // for test
   const [testUsername, setTestUsername] = useState<string>("");
   const [testMessage, setTestMessage] = useState<string>("");
+  const [isDebugMode, setIsDebugMode] = useAtom(isDebugModeAtom);
 
   const handleChangeMessage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setNowMessage(event.target.value);
@@ -247,6 +250,12 @@ export default function Home() {
     };
   }, [socket, userUUID]);
 
+  useEffect(() => {
+    const container = window.document.getElementById("chatLog");
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, [chatLog]);
+
   // useEffect(() => {
   //   handleWebSocketMessage();
   // }, [chatLog, socket, userData, username]);
@@ -268,7 +277,7 @@ export default function Home() {
   if (!isConnected) return <div>Connecting...</div>;
   return (
     <main
-      className={`py-8 mx-auto ${inter.className} w-[80vw] max-w-2xl min-h-max`}
+      className={`py-8 mx-auto ${inter.className} w-[80vw] max-w-2xl min-h-max relative`}
     >
       <div className="flex flex-row justify-between">
         <h1 className="text-3xl font-bold">Liar of Turing</h1>
@@ -315,9 +324,13 @@ export default function Home() {
         </div>
         <div className="flex flex-col flex-1">
           <h3 className="mt-6 font-bold text-xl">Chat Log</h3>
-          <ul className="overflow-y-scroll min-h-[50vh] max-h-[50vh] my-4 flex-1">
+          <ul
+            className="overflow-y-scroll min-h-[50vh] max-h-[50vh] my-4 flex-1"
+            id="chatLog"
+          >
             {chatLog.length > 0 &&
               chatLog.map((message: Message, idx) => {
+                if (message.message_type === "system") return;
                 return (
                   <li key={idx} className="flex py-0.5 pr-16 leading-[22px]">
                     <div className="flex py-0.5 leading-[22px]">
@@ -381,7 +394,7 @@ export default function Home() {
         <div className="flex flex-col">
           <h3 className="mt-6 font-bold text-xl">Choose AI</h3>
           <form className="flex flex-row" onSubmit={handleTestSendMessage}>
-            <label htmlFor="ai">{`I think the AI is.. `}</label>
+            <label htmlFor="ai">{`I think the AI is..`}</label>
             <select
               name="ai"
               id="ai"
@@ -414,40 +427,51 @@ export default function Home() {
         </div>
       )}
 
-      {/* for test */}
-      <div className="my-80"></div>
+      <button
+        className="top-0 -right-[25vw] absolute text-white hover:text-black"
+        onClick={() => setIsDebugMode((isDebugMode) => !isDebugMode)}
+      >
+        debug
+      </button>
 
-      <form className="flex flex-row" onSubmit={handleTestSendMessage}>
-        <label htmlFor="username">Username</label>
-        <select
-          name="username"
-          id="username"
-          onChange={(e) => {
-            setTestUsername(e.target.value);
-          }}
-          className="border-2 border-gray-400 rounded-md w-fit-content"
-        >
-          {userList &&
-            userList.length > 0 &&
-            userList.map((user: Player, index) => {
-              return (
-                <option key={index} value={user.username}>
-                  {user.username}
-                </option>
-              );
-            })}
-        </select>
-        <label htmlFor="message" className="mx-2 ">
-          Message
-        </label>
-        <input
-          className="border-2 border-gray-400 rounded-md w-fit-content"
-          type="text"
-          id="message"
-          value={testMessage}
-          onChange={handleChangeTestMessage}
-        />
-      </form>
+      {/* for test */}
+      {isDebugMode && (
+        <div className="flex flex-col">
+          <div className="mt-40"></div>
+
+          <form className="flex flex-row" onSubmit={handleTestSendMessage}>
+            <label htmlFor="username">Username</label>
+            <select
+              name="username"
+              id="username"
+              onChange={(e) => {
+                setTestUsername(e.target.value);
+              }}
+              className="border-2 border-gray-400 rounded-md w-fit-content"
+            >
+              {userList &&
+                userList.length > 0 &&
+                userList.map((user: Player, index) => {
+                  return (
+                    <option key={index} value={user.username}>
+                      {user.username}
+                    </option>
+                  );
+                })}
+            </select>
+            <label htmlFor="message" className="mx-2 ">
+              Message
+            </label>
+            <input
+              className="border-2 border-gray-400 rounded-md w-fit-content"
+              type="text"
+              id="message"
+              value={testMessage}
+              onChange={handleChangeTestMessage}
+            />
+          </form>
+        </div>
+      )}
     </main>
   );
 }

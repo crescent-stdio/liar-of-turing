@@ -200,7 +200,7 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 	*response = WsJsonResponse{
 		Timestamp:      e.Timestamp,
 		Action:         "human_info",
-		MessageType:    "info",
+		MessageType:    "system",
 		Message:        fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName),
 		User:           nowUser,
 		OnlineUserList: getUserList(),
@@ -256,7 +256,7 @@ func broadcastToAll(response WsJsonResponse) {
 
 func getRandomUsername() (int, string) {
 	//random suffle nicknames and return not used nickname
-	rand.Seed(time.Now().UnixNano())
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	perm := rand.Perm(len(nicknames))
 	for _, v := range perm {
 		if !nicknames[v].IsUsed {

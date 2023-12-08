@@ -1,1 +1,1 @@
-export const TIMER_TIME = 5;
+export const TIMER_TIME = 50;
