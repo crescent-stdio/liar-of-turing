@@ -24,7 +24,7 @@ jobs:
           key: ${{ secrets.REMOTE_HOST_SSH_KEY }}
           # port: ${{ secrets.REMOTE_HOST_PORT }}
           script: |
-            cd liarOfTuring
+            cd liar-of-turing
             git fetch --all
             git checkout $BRANCH_NAME
             git pull origin $BRANCH_NAME
