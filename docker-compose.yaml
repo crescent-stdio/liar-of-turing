@@ -9,8 +9,6 @@ services:
     container_name: web-application
     depends_on:
       - go-server
-    # ports:
-    #   - "3000:3000"
     expose:
       - "3000"
     networks:
@@ -22,8 +20,6 @@ services:
     restart: always
   go-server:
     container_name: go-server
-    # ports:
-    #   - "8443:8443"
     expose:
       - "8443"
     env_file:
@@ -36,17 +32,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    # volumes:
-    #   - ./nginx.conf:/etc/nginx/nginx.conf
     build:
       dockerfile: ./nginx.Dockerfile
     networks:
       - web-app-connection
       - go-server-connection
-    # tty: true
-    # command: tail -F anything
-
-    # volumes:
-    #   - ./go-server:/app
-    # depends_on:
-    #   - db

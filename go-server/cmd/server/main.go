@@ -4,7 +4,6 @@ import (
 	"liarOfTuring/internal/handlers"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 
 	"github.com/joho/godotenv"
@@ -63,25 +62,19 @@ func main() {
 	})
 
 	mux := routes()
-	log.Println("Starting channel listener")
+	log.Println("Starting channel listener ")
 	go handlers.ListenToWsChannel()
 
-	// URL := os.Getenv("URL")
-
-	URL := ":" + os.Getenv("PORT")
-	log.Println("URL", URL)
-
 	server := http.Server{
-		Addr:    URL,
+		Addr:    ":8443",
 		Handler: c.Handler(mux),
 	}
 
-	// SSL/TLS certificate
-	err = server.ListenAndServe() // for local testing
-	// err = server.ListenAndServeTLS("./cert.pem", "./key.pem") // for production
+	log.Println("Listening on port :8443")
+	err = server.ListenAndServe()
 
 	if err != nil {
-		log.Fatal("ListenAndServeTLS: ", err)
+		log.Fatal("Error starting server: ", err)
 	}
 
 }
