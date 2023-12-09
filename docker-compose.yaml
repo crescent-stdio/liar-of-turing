@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   web-application:
-    container_name: web-application
+    container_name: web-app
     depends_on:
       - go-server
     ports:
@@ -11,7 +11,7 @@ services:
     build: ./web-application
     restart: always
   go-server:
-    container_name: go-server
+    container_name: go-websocket
     ports:
       - "8443:8443"
     env_file:
