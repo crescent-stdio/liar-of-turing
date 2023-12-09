@@ -1,22 +1,48 @@
 version: "3.8"
+networks:
+  web-app-connection:
+    driver: bridge
+  go-server-connection:
+    driver: bridge
 services:
   web-application:
+    container_name: web-application
     depends_on:
       - go-server
-    ports:
-      - "443:3000"
+    # ports:
+    #   - "3000:3000"
+    expose:
+      - "3000"
+    networks:
+      - web-app-connection
+      - go-server-connection
     env_file:
       - ./web-application/.env
     build: ./web-application
     restart: always
   go-server:
-    ports:
-      - "8443:8443"
+    container_name: go-server
+    # ports:
+    #   - "8443:8443"
+    expose:
+      - "8443"
     env_file:
       - ./go-server/.env
+    networks:
+      - go-server-connection
     build: ./go-server
     restart: always
-
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    # volumes:
+    #   - ./nginx.conf:/etc/nginx/nginx.conf
+    build:
+      dockerfile: ./nginx.Dockerfile
+    networks:
+      - web-app-connection
+      - go-server-connection
     # tty: true
     # command: tail -F anything
 
