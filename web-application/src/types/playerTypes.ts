@@ -1,19 +1,22 @@
-import { User } from "./wsTypes";
+// import { User } from "./wsTypes";
 
-export interface Player {
+export interface User {
   uuid: string;
   user_id: number;
+  nickname_id: number;
   username: string;
   role: string;
+  is_online: boolean;
+  player_type: string;
 }
 
 export interface Game {
-  players: Player[];
+  players: User[];
   isOver: boolean;
 }
 export interface Message {
-  message_id: number;
   timestamp: number;
+  message_id: number;
   user: User;
   message: string;
   message_type: string;
@@ -21,11 +24,10 @@ export interface Message {
 
 export interface Room {
   room_id: number;
-  room_name: string;
-  room_type: string;
+  // room_name: string;
+  // room_type: string;
   room_status: string;
-  room_owner: User;
   room_members: User[];
   room_messages: Message[];
-  room_game: Game;
+  game_status: Game;
 }

@@ -60,16 +60,18 @@ type WsJsonResponse struct {
 	Message        string `json:"message"`
 	MessageType    string `json:"message_type"`
 	OnlineUserList []User `json:"online_user_list"`
+	PlayerList     []User `json:"player_list"`
 }
 
 type User struct {
-	UUID       string `json:"uuid"`
-	UserId     int64  `json:"user_id"`
-	RoomId     int64  `json:"room_id"`
+	UUID   string `json:"uuid"`
+	UserId int64  `json:"user_id"`
+	// RoomId     int64  `json:"room_id"`
 	NicknameId int    `json:"nickname_id"`
 	UserName   string `json:"username"`
 	Role       string `json:"role"`
 	IsOnline   bool   `json:"is_online"`
+	PlayerType string `json:"player_type"`
 }
 
 func sortUserList(users []User) []User {
@@ -87,6 +89,7 @@ type WsPayload struct {
 	Timestamp int64               `json:"timestamp"`
 	Message   string              `json:"message"`
 	Conn      WebSocketConnection `json:"-"` // ignore this field
+
 }
 
 // WsEndpoint upgrades connection to websocket
@@ -236,7 +239,7 @@ func getUserList() []User {
 			userList = append(userList, v)
 		}
 	}
-	sortUserList(userList)
+	// sortUserList(userList)
 	return userList
 }
 
