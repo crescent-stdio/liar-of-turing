@@ -155,7 +155,6 @@ func ListenToWsChannel() {
 				MessageType:    "message",
 				OnlineUserList: getUserList(),
 			}
-
 		case "list_users":
 			response = WsJsonResponse{
 				Timestamp:      e.Timestamp,
@@ -169,7 +168,8 @@ func ListenToWsChannel() {
 
 		case "left_user":
 			processLeftUser(e, &response)
-
+		case "user_is_ready":
+			processReadyUser(e, &response)
 		default:
 			log.Printf("Unknown action: %s\n", e.Action)
 		}
@@ -192,6 +192,7 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 			Role:       "human",
 			UUID:       e.User.UUID,
 			IsOnline:   true,
+			PlayerType: "watcher",
 		}
 		// players[e.User.UUID] = nowUser
 	}
@@ -230,6 +231,24 @@ func processLeftUser(e WsPayload, response *WsJsonResponse) {
 			OnlineUserList: getUserList(),
 		}
 	}
+}
+
+func processReadyUser(e WsPayload, response *WsJsonResponse) {
+	nowUser := players[e.User.UUID]
+	nowUser.PlayerType = "player"
+	log.Println(nowUser.NicknameId)
+	players[e.User.UUID] = nowUser
+	clients[e.Conn] = nowUser
+
+	*response = WsJsonResponse{
+		Timestamp:      e.Timestamp,
+		Action:         "human_info",
+		MessageType:    "system",
+		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
+		User:           nowUser,
+		OnlineUserList: getUserList(),
+	}
+
 }
 
 func getUserList() []User {

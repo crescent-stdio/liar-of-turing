@@ -1,4 +1,5 @@
 import { Message, Room, User } from "@/types/playerTypes";
+import { atom } from "jotai";
 import { atomWithReset } from "jotai/utils";
 
 export const roomListAtom = atomWithReset<Room[]>(
@@ -52,7 +53,23 @@ export const userAtom = atomWithReset<User>({
   player_type: "",
 });
 
-export const userListAtom = atomWithReset<User[]>([]);
+export const userListAtom = atom<User[]>([]);
+export const playerListAtom = atom<User[]>((get: any) => {
+  const userList = get(userListAtom);
+  console.log("userList", userList);
+  const playerList = userList.filter((user: User) => {
+    return user.player_type === "player";
+  });
+  return playerList;
+});
+
+export const watcherListAtom = atom<User[]>((get: any) => {
+  const userList = get(userListAtom);
+  const watcherList = userList.filter((user: User) => {
+    return user.player_type === "watcher";
+  });
+  return watcherList;
+});
 
 export const messageAtom = atomWithReset<string>("");
 

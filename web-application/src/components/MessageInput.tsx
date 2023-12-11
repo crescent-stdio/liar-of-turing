@@ -4,12 +4,12 @@ import { WsJsonRequest } from "@/types/wsTypes";
 
 type MessageInputProps = {
   userData: User;
-  onSendMessage: (message: WsJsonRequest) => void;
+  sendMessage: (message: WsJsonRequest) => void;
 };
 
 const MessageInput: React.FC<MessageInputProps> = ({
   userData,
-  onSendMessage,
+  sendMessage,
 }) => {
   const {
     // inputMessage,
@@ -27,7 +27,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       timestamp: Date.now(),
       message: message,
     };
-    onSendMessage(jsonData);
+    sendMessage(jsonData);
     resetMessage();
   };
 

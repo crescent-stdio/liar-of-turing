@@ -71,6 +71,7 @@ export default function useWebSocket(userUUID: string) {
         break;
       case "update_state":
         console.log("update_state", data);
+        setUser(data.user);
         setUserList(() => {
           if (!data.online_user_list) return [];
           return data.online_user_list;

@@ -1,6 +1,5 @@
 import { messageAtom } from "@/store/chatAtom";
 import { useAtom } from "jotai";
-import { useState } from "react";
 
 export interface MessageInputHook {
   message: string;
