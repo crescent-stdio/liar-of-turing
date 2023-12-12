@@ -1,16 +1,13 @@
 import React from "react";
-import OnlineUserList from "@/components/OnlineUserList";
 import MessageInput from "@/components/MessageInput";
-import TimerDisplay from "@/components/TimeDisplay";
-import DebugPanel from "@/components/settings/AdminMessageSender";
 import useWebSocket from "@/hook/useWebSocket";
-import useTimer from "@/hook/useTimer";
 import { getUserUUID } from "@/utils/liarHelper";
 import ChatTimeline from "@/components/ChatTimeline";
 import PlayAndWaitUserList from "@/components/PlayAndWaitUserList";
 import ReadyButton from "@/components/ReadyButton";
 import { useAtom } from "jotai";
 import { isGameStartedAtom, isUserJoinGameAtom } from "@/store/gameAtom";
+import VerticalLine from "@/components/Line/VerticalLine";
 
 export default function Page() {
   const {
@@ -27,9 +24,9 @@ export default function Page() {
   if (!isConnected) return <div>Connecting...</div>;
 
   return (
-    <main className="py-8 mx-auto w-[80vw] max-w-2xl min-h-max relative">
-      <div className="flex flex-row justify-between">
-        <h1 className="text-3xl font-bold italic underline">Liar of Turing</h1>
+    <main className="max-w-screen-md mx-auto bg-white shadow-lg py-8 px-4 lg:px-8 min-h-screen">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-4xl font-bold italic">Liar of Turing</h1>
         {!isGameStarted && user && user.player_type !== "player" && (
           <ReadyButton
             userData={user}
@@ -38,9 +35,11 @@ export default function Page() {
         )}
       </div>
       {/* <hr className="w-[50%] h-1 bg-black" /> */}
-      <div className="flex flex-row-reverse justify-between">
-        <PlayAndWaitUserList userData={user} />
+      {/* <div className="flex flex-row-reverse justify-between"> */}
+      <div className="flex flex-col lg:flex-row justify-between space-y-4 lg:space-y-0 lg:space-x-4">
         <ChatTimeline messageLogList={messageLogList} userData={user} />
+        <VerticalLine />
+        <PlayAndWaitUserList userData={user} />
       </div>
       {isUserJoinGame && (
         <MessageInput

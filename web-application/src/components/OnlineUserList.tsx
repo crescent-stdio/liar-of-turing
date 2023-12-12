@@ -14,7 +14,7 @@ const OnlineUserList: React.FC<OnlineUserListProps> = ({
   userData,
 }) => {
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex-1">
       <h3 className="mt-4 font-bold text-xl">{name}</h3>
       <ul className="my-4 min-h-80 flex-1">
         {userList &&

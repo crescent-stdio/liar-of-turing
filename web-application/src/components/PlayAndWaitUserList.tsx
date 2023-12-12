@@ -4,6 +4,7 @@ import { playerListAtom, watcherListAtom } from "@/store/chatAtom";
 import { useAtomValue } from "jotai";
 import { maxPlayerAtom } from "@/store/gameAtom";
 import { useEffect, useState } from "react";
+import HorizontalLine from "./Line/HorizontalLine";
 type PlayAndWaitUserListProps = {
   userData: User;
 };
@@ -21,13 +22,13 @@ export default function PlayAndWaitUserList({
     setPlayerListTitle(`Players [${playerList.length}/${maxPlayer}]`);
   }, [playerList.length, maxPlayer]);
   return (
-    <div className="flex flex-col h-full ml-4">
+    <div className="flex flex-col h-full ml-4 min-h-[70vh] max-h-[70vh]">
       <OnlineUserList
         name={playerListTitle}
         userData={userData}
         userList={playerList}
       />
-      <hr className="my-2" />
+      <HorizontalLine />
       <OnlineUserList
         name={"Watchers"}
         userData={userData}
