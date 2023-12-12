@@ -16,7 +16,9 @@ const config: Config = {
       colors: {
         "liar-blue": "#3b82f6",
         "liar-blue-light": "#93c5fd",
+        "liar-blue-lighter": "#d1e5fe",
         "liar-blue-dark": "#1e40af",
+        "liar-blue-darker": "#18338c",
       },
     },
   },

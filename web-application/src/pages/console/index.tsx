@@ -1,6 +1,6 @@
 import AdminMessageSender from "@/components/settings/AdminMessageSender";
+import ClearMessageLogList from "@/components/settings/ClearMessageLogList";
 import SetMaxPayer from "@/components/settings/SetMaxPlayer";
-import ClearMessageLogList from "@/components/settings/clearMessageLogList";
 import useWebSocket from "@/hook/useWebSocket";
 import { adminUser } from "@/store/chatStore";
 

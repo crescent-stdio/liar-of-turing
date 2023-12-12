@@ -13,6 +13,8 @@ import {
   gameRoundAtom,
   gameTurnsLeftAtom,
   isFinishedRoundAtom,
+  isFinishedSubmitionAtom,
+  isGameStartedAtom,
   isYourTurnAtom,
   maxPlayerAtom,
 } from "@/store/gameAtom";
@@ -23,6 +25,7 @@ import {
   sendEnterHumanByUUID,
   sendEnterHumanByUserData,
   sendLeftUser,
+  setUserData,
 } from "@/utils/wsHelper";
 import { atom, useAtom, useAtomValue } from "jotai";
 import { useResetAtom } from "jotai/utils";
@@ -43,29 +46,52 @@ export default function useWebSocket(
   const [maxPlayer, setMaxPlayer] = useAtom(maxPlayerAtom);
   const [, setIsYourTurn] = useAtom(isYourTurnAtom);
   // const [];
-  const [, setGameTurnsLeft] = useAtom(gameTurnsLeftAtom);
-  const [, setGameRound] = useAtom(gameRoundAtom);
-  const [, setPlayerList] = useAtom(playerListAtom);
-  const [, setIsFinishedRound] = useAtom(isFinishedRoundAtom);
+  const [gameTurnsLeft, setGameTurnsLeft] = useAtom(gameTurnsLeftAtom);
+  const [gameRound, setGameRound] = useAtom(gameRoundAtom);
+  const [playerList, setPlayerList] = useAtom(playerListAtom);
+  const [isGameStarted, setIsGameStarted] = useAtom(isGameStartedAtom);
+  const [isFinishedRound, setIsFinishedRound] = useAtom(isFinishedRoundAtom);
+  const [isFinishedSubmition, setIsFinishedSubmition] = useAtom(
+    isFinishedSubmitionAtom
+  );
+  const [, setGameRoundNum] = useAtom(gameRoundAtom);
+  const [, setGameTurnsNum] = useAtom(gameTurnsLeftAtom);
 
   // Function to handle incoming WebSocket messages
   const handleWebSocketMessage = useCallback((event: MessageEvent) => {
     const data: WsJsonResponse = JSON.parse(event.data);
     console.log("Received action:", data.action);
+    console.log(data.message);
 
     switch (data.action) {
+      case "choose_ai":
+        console.log("choose_ai", data);
+        setIsGameStarted(false);
+        setIsFinishedSubmition(false);
+        setIsFinishedRound(true);
+
+        setUserList(() => {
+          if (!data.online_user_list) return [];
+          return data.online_user_list.filter((user) => user.role !== "admin");
+        });
+        setMessageLogList(() => {
+          if (!data.message_log_list) return [];
+          return data.message_log_list;
+        });
+        break;
+      case "wait_for_players":
+        setIsFinishedSubmition(true);
+      case "submit_ai":
+        setIsFinishedSubmition(false);
       case "human_info":
         setUserList(() => {
           if (!data.online_user_list) return [];
           return data.online_user_list.filter((user) => user.role !== "admin");
         });
-        if (userUUID && userUUID === data.user.uuid) {
-          setUser(data.user);
-        }
+        // if (userUUID && userUUID === data.user.uuid) {
+        //   setUser(data.user);
+        // }
 
-        updateChatLog(setChatLog, data);
-
-        setMaxPlayer(data.max_player);
         setMessageLogList(() => {
           if (!data.message_log_list) return [];
           return data.message_log_list;
@@ -75,7 +101,6 @@ export default function useWebSocket(
       case "user_list":
         console.log("user_list", data.online_user_list);
 
-        setMaxPlayer(data.max_player);
         setUserList(() => {
           if (!data.online_user_list) return [];
           return data.online_user_list.filter((user) => user.role !== "admin");
@@ -84,9 +109,7 @@ export default function useWebSocket(
         break;
       case "new_message":
         console.log("Message", data);
-        updateChatLog(setChatLog, data);
 
-        setMaxPlayer(data.max_player);
         setMessageLogList(() => {
           if (!data.message_log_list) return [];
           return data.message_log_list;
@@ -96,18 +119,9 @@ export default function useWebSocket(
       case "your_turn":
         console.log("your_turn", data);
         setIsYourTurn(true);
-        if (data.user.uuid === userUUID) {
-          setUser(data.user);
-        }
-        setMaxPlayer(data.max_player);
-        setUserList(() => {
-          if (!data.online_user_list) return [];
-          return data.online_user_list.filter((user) => user.role !== "admin");
-        });
-        updateChatLog(setChatLog, data);
+        setIsGameStarted(true);
         setMessageLogList((prevMessageLogList) => {
           if (!data.message_log_list) return [];
-          // return data.message_log_list;
           const messageLog: Message = {
             timestamp: data.timestamp,
             message_id: data.message_id,
@@ -120,44 +134,57 @@ export default function useWebSocket(
         break;
       case "update_state":
         console.log("update_state", data);
-        if (data.user.uuid === userUUID) {
-          setUser(data.user);
-        }
-        setMaxPlayer(data.max_player);
+
         setUserList(() => {
           if (!data.online_user_list) return [];
           return data.online_user_list.filter((user) => user.role !== "admin");
         });
-        updateChatLog(setChatLog, data);
         setMessageLogList(() => {
           if (!data.message_log_list) return [];
           return data.message_log_list;
         });
+        setGameRoundNum(data.game_round);
+        setGameTurnsNum(data.game_turns_left);
         break;
-      case "choose_ai":
-        console.log("choose_ai", data);
-        setIsFinishedRound(true);
-        if (data.user.uuid === userUUID) {
-          setUser(data.user);
-        }
-        setMaxPlayer(data.max_player);
-        setUserList(() => {
-          if (!data.online_user_list) return [];
-          return data.online_user_list.filter((user) => user.role !== "admin");
-        });
-        updateChatLog(setChatLog, data);
+      case "round_start":
+        setIsGameStarted(true);
+        setIsFinishedRound(false);
+        break;
+      case "next_round":
+        console.log("next_round", data);
+        setIsFinishedRound(false);
+        setIsFinishedSubmition(false);
+        setIsYourTurn(false);
         setMessageLogList(() => {
           if (!data.message_log_list) return [];
           return data.message_log_list;
         });
+        setPlayerList(data.player_list);
+        break;
+      case "game_over":
+        console.log("game_over", data);
+        setIsFinishedRound(true);
+        setIsGameStarted(false);
         break;
     }
     console.log(data.game_turns_left, data.game_round, data.player_list);
+
+    if (userUUID) {
+      const myUser = data.online_user_list.find(
+        (user: User) => user.uuid === userUUID
+      );
+      if (myUser) {
+        setUser(myUser);
+      }
+    }
+    updateChatLog(setChatLog, data);
     if (data.game_turns_left >= 0) setGameTurnsLeft(data.game_turns_left);
     if (data.game_round > 0) setGameRound(data.game_round);
+    if (data.max_player) setMaxPlayer(data.max_player);
     if (data.player_list && data.player_list.length >= 0)
       setPlayerList(data.player_list);
-  }, []);
+    // }, []);
+  }, []); // Add other dependencies as needed
 
   // Function to send WebSocket messages
   const handleWebSocketMessageSend = useCallback(
@@ -187,7 +214,18 @@ export default function useWebSocket(
       socket.onmessage = handleWebSocketMessage;
       socket.onclose = handleWebSocketClose;
     }
-  }, [socket, messageLogList, userUUID]);
+  }, [
+    socket,
+    messageLogList,
+    userUUID,
+    playerList,
+    userData,
+    maxPlayer,
+    gameTurnsLeft,
+    gameRound,
+    isFinishedRound,
+    isFinishedSubmition,
+  ]);
 
   useEffect(() => {
     const sc = new WebSocket(WEBSOCKET_URL);

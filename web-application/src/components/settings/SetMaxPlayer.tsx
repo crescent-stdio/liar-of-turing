@@ -1,4 +1,4 @@
-import { adminUser } from "@/store/chatStore";
+import { adminUser, initialUserSelection } from "@/store/chatStore";
 import { maxPlayerAtom } from "@/store/gameAtom";
 import { WsJsonRequest } from "@/types/wsTypes";
 import { useAtom } from "jotai";
@@ -21,6 +21,7 @@ export default function SetMaxPayer({ sendMessage }: SetMaxPayerProps) {
       message: `Set max player to ${player}`,
       game_round: 0,
       game_turns_left: 0,
+      user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
     setMaxPlayer(player);

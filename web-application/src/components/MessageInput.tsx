@@ -1,4 +1,5 @@
 import useMessageInput from "@/hook/useMessageInput";
+import { initialUserSelection } from "@/store/chatStore";
 import {
   gameRoundAtom,
   gameTurnsLeftAtom,
@@ -40,6 +41,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       message: message,
       game_round: gameRound,
       game_turns_left: gameTurnsLeft,
+      user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
     resetMessage();

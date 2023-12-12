@@ -57,20 +57,22 @@ var isGameStarted = false
 var gameInfo = make([]Game, 0)
 var gameTurnsLeft = gameTurnNum * MaxPlayer
 var gameRound = 1
+var userSelections = make([]UserSelection, 0)
 
 type Game struct {
-	NowUserIndex        int                  `json:"now_user_index"`
-	MaxPlayer           int                  `json:"max_player"`
-	OnlineUserList      []User               `json:"online_user_list"`
-	PlayerList          []User               `json:"player_list"`
-	TurnsLeft           int                  `json:"turns_left"`
-	UserRoundSelections []UserRoundSelection `json:"user_round_selections"`
+	NowUserIndex   int             `json:"now_user_index"`
+	MaxPlayer      int             `json:"max_player"`
+	OnlineUserList []User          `json:"online_user_list"`
+	PlayerList     []User          `json:"player_list"`
+	TurnsLeft      int             `json:"turns_left"`
+	UserSelections []UserSelection `json:"user_round_selections"`
+	Messages       []Message       `json:"messages"`
 }
 
-type UserRoundSelection struct {
-	User          User   `json:"user"`
-	WhoIsAI       bool   `json:"who_is_ai"`
-	ReasonMessage string `json:"reason_message"`
+type UserSelection struct {
+	User      User   `json:"user"`
+	Selection string `json:"selection"`
+	Reason    string `json:"reason"`
 }
 
 // upgradeConnection is the websocket upgrader from gorilla/websockets
@@ -94,17 +96,20 @@ func (conn *WebSocketConnection) SafeClose() {
 
 // WsJsonResponse defines the response sent back from websocket
 type WsJsonResponse struct {
-	Timestamp      int64     `json:"timestamp"`
-	MaxPlayer      int       `json:"max_player"`
-	Action         string    `json:"action"`
-	User           User      `json:"user"`
-	Message        string    `json:"message"`
-	MessageType    string    `json:"message_type"`
-	MessageLogList []Message `json:"message_log_list"`
-	OnlineUserList []User    `json:"online_user_list"`
-	PlayerList     []User    `json:"player_list"`
-	GameTurnsLeft  int       `json:"game_turns_left"`
-	GameRound      int       `json:"game_round"`
+	Timestamp      int64           `json:"timestamp"`
+	MaxPlayer      int             `json:"max_player"`
+	Action         string          `json:"action"`
+	User           User            `json:"user"`
+	Message        string          `json:"message"`
+	MessageType    string          `json:"message_type"`
+	MessageLogList []Message       `json:"message_log_list"`
+	OnlineUserList []User          `json:"online_user_list"`
+	PlayerList     []User          `json:"player_list"`
+	GameTurnsLeft  int             `json:"game_turns_left"`
+	GameRound      int             `json:"game_round"`
+	GameTurnNum    int             `json:"game_turn_num"`
+	GameRoundNum   int             `json:"game_round_num"`
+	GamsSelections []UserSelection `json:"game_selections"`
 }
 
 type User struct {
@@ -141,9 +146,12 @@ type WsPayload struct {
 	User          User                `json:"user"`
 	Timestamp     int64               `json:"timestamp"`
 	Message       string              `json:"message"`
-	Conn          WebSocketConnection `json:"-"` // ignore this field
 	GameTurnsLeft int                 `json:"game_turns_left"`
 	GameRound     int                 `json:"game_round"`
+	GameTurnNum   int                 `json:"game_turn_num"`
+	GameRoundNum  int                 `json:"game_round_num"`
+	UserSelection UserSelection       `json:"user_selection"`
+	Conn          WebSocketConnection `json:"-"` // ignore this field
 }
 
 func Max(a, b int) int {
@@ -205,12 +213,13 @@ func ListenToWsChannel() {
 		// Consolidated logging
 		log.Printf("Action: %s, User: %v\n", e.Action, e.User)
 
-		mutex.Lock()
 		// MaxPlayer = e.MaxPlayer
 		log.Println("MaxPlayer:", MaxPlayer)
 		log.Println("messages:", messages)
+		log.Println("userSelections:", userSelections)
 		switch e.Action {
 		case "broadcast", "new_message_admin":
+			mutex.Lock()
 			message := Message{
 				Timestamp:   e.Timestamp,
 				MessageId:   int64(len(messages)),
@@ -235,8 +244,10 @@ func ListenToWsChannel() {
 				GameRound:      gameRound,
 			}
 			broadcastToAll(response)
+			mutex.Unlock()
 
 		case "list_users":
+			mutex.Lock()
 			response = WsJsonResponse{
 				Timestamp:      e.Timestamp,
 				Action:         "update_status",
@@ -249,6 +260,7 @@ func ListenToWsChannel() {
 				GameRound:      gameRound,
 			}
 			broadcastToAll(response)
+			mutex.Unlock()
 		case "new_message":
 			processNewMessage(e, &response)
 			// broadcastToAll(response)
@@ -258,12 +270,15 @@ func ListenToWsChannel() {
 
 		case "left_user":
 			processLeftUser(e, &response)
-			broadcastToAll(response)
 
 		case "user_is_ready":
 			processReadyUser(e, &response)
 
+		case "choose_ai":
+			processChooseAI(e)
+
 		case "set_max_player":
+			mutex.Lock()
 			MaxPlayer = e.MaxPlayer
 			log.Println("e.MaxPlayer:", MaxPlayer)
 			message := Message{
@@ -271,13 +286,13 @@ func ListenToWsChannel() {
 				MessageId:   int64(len(messages)),
 				User:        e.User,
 				Message:     fmt.Sprintf("최대 인원이 %d명으로 설정되었습니다.", MaxPlayer),
-				MessageType: "alert",
+				MessageType: "info", // "alert",
 			}
 			messages = append(messages, message)
 			response = WsJsonResponse{
 				Timestamp:      e.Timestamp,
 				Action:         "update_state",
-				MessageType:    "alert",
+				MessageType:    "info",
 				Message:        message.Message,
 				MaxPlayer:      MaxPlayer,
 				User:           User{},
@@ -288,8 +303,64 @@ func ListenToWsChannel() {
 				GameRound:      gameRound,
 			}
 			broadcastToAll(response)
+			mutex.Unlock()
+		case "set_game_round":
+			mutex.Lock()
+			gameRoundNum = e.GameRound
+			log.Println("e.GameRound:", gameRoundNum)
+			message := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        e.User,
+				Message:     fmt.Sprintf("라운드 수가 %d개로 설정되었습니다.", gameRoundNum),
+				MessageType: "info", // "alert",
+			}
+			messages = append(messages, message)
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "update_state",
+				MessageType:    "info",
+				Message:        message.Message,
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: messages,
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+			}
+			broadcastToAll(response)
+			mutex.Unlock()
+		case "set_game_turn":
+			mutex.Lock()
+			gameTurnNum = e.GameTurnNum
+			log.Println("e.GameTurn:", gameTurnNum)
+			message := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        e.User,
+				Message:     fmt.Sprintf("턴 수가 %d개로 설정되었습니다.", gameTurnNum),
+				MessageType: "info", // "alert",
+			}
+			messages = append(messages, message)
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "update_state",
+				MessageType:    "info",
+				Message:        message.Message,
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: messages,
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+			}
+			broadcastToAll(response)
+			mutex.Unlock()
 
 		case "clear_messages":
+			mutex.Lock()
 			messages = []Message{}
 			response = WsJsonResponse{
 				Timestamp:      e.Timestamp,
@@ -305,6 +376,25 @@ func ListenToWsChannel() {
 				GameRound:      gameRound,
 			}
 			broadcastToAll(response)
+			mutex.Unlock()
+		case "get_game_Info":
+			mutex.Lock()
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "get_game_Info",
+				MessageType:    "info",
+				Message:        "게임 정보를 가져왔습니다.",
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: makeMessagesFromGameInfo(gameInfo),
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+				GamsSelections: userSelections,
+			}
+			broadCastToSomeone(response, e.Conn)
+			mutex.Unlock()
 
 		default:
 			log.Printf("Unknown action: %s\n", e.Action)
@@ -313,7 +403,6 @@ func ListenToWsChannel() {
 		// if response.Action != "" {
 		// 	broadcastToAll(response)
 		// }
-		mutex.Unlock()
 	}
 }
 
@@ -321,7 +410,9 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 	nowUser, exists := players[e.User.UUID]
 	log.Println("processEnterHuman")
 	log.Println("isGameStarted:", isGameStarted)
+	log.Println("gameTurnsLeft:", gameTurnsLeft)
 
+	mutex.Lock()
 	if !exists {
 		nicknameId, userName := getRandomUsername()
 		nowUser = User{
@@ -354,8 +445,56 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 		GameRound:      gameRound,
 	}
 	broadcastToAll(*response)
+	mutex.Unlock()
+
+	if gameTurnsLeft == 0 {
+		processGameOver(e)
+		// messages = append(messages, waitMessage)
+		// in userSelection
+		if exists && nowUser.PlayerType == "player" {
+			mutex.Lock()
+			var waitResponse WsJsonResponse
+			_, exists := findUserInUserSelection(userSelections, nowUser)
+			log.Println("exists:", exists)
+			log.Println(userSelections)
+			log.Println(nowUser)
+			if exists {
+				waitResponse = WsJsonResponse{
+					Timestamp:      e.Timestamp,
+					Action:         "wait_for_players",
+					MessageType:    "alert",
+					Message:        "라운드가 종료되었습니다. 다음 플레이어의 선택을 기다리세요.",
+					MaxPlayer:      MaxPlayer,
+					User:           User{},
+					MessageLogList: messages,
+					OnlineUserList: getUserList(),
+					PlayerList:     getPlayerList(),
+					GameTurnsLeft:  gameTurnsLeft,
+					GameRound:      gameRound,
+				}
+			} else {
+				waitResponse = WsJsonResponse{
+					Timestamp:      e.Timestamp,
+					Action:         "submit_ai",
+					MessageType:    "alert",
+					Message:        "라운드가 종료되었습니다. 다음 라운드를 위해 AI를 선택하세요.",
+					MaxPlayer:      MaxPlayer,
+					User:           User{},
+					MessageLogList: messages,
+					OnlineUserList: getUserList(),
+					PlayerList:     getPlayerList(),
+					GameTurnsLeft:  gameTurnsLeft,
+					GameRound:      gameRound,
+				}
+			}
+			broadCastToSomeone(waitResponse, e.Conn)
+			mutex.Unlock()
+		}
+		return
+	}
 
 	if isGameStarted {
+		mutex.Lock()
 		nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
 		if nextUser.UUID == e.User.UUID {
 			nowUser.PlayerType = "player"
@@ -380,16 +519,16 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 				GameTurnsLeft:  gameTurnsLeft,
 				GameRound:      gameRound,
 			}
-			nextConn := getNextUserClientByUUID(nextUser.UUID)
-			braodCastToSomeone(someoneResponse, nextConn, nextUser)
+			nextConn := getUserClientByUUID(nextUser.UUID)
+			broadCastToSomeone(someoneResponse, nextConn)
 		}
+		mutex.Unlock()
 	}
-	if gameTurnsLeft == 0 {
-		processGameOver(e)
-	}
+
 }
 
 func processLeftUser(e WsPayload, response *WsJsonResponse) {
+	mutex.Lock()
 	if leftUser, ok := clients[e.Conn]; ok {
 		leftUser.IsOnline = false
 		players[e.User.UUID] = leftUser
@@ -424,6 +563,8 @@ func processLeftUser(e WsPayload, response *WsJsonResponse) {
 			GameRound:      gameRound,
 		}
 	}
+	broadcastToAll(*response)
+	mutex.Unlock()
 }
 
 func processNewMessage(e WsPayload, response *WsJsonResponse) {
@@ -443,6 +584,7 @@ func processNewMessage(e WsPayload, response *WsJsonResponse) {
 		processGameOver(e)
 	}
 
+	mutex.Lock()
 	nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
 	someoneMessage := Message{
 		Timestamp:   e.Timestamp,
@@ -465,8 +607,9 @@ func processNewMessage(e WsPayload, response *WsJsonResponse) {
 		GameTurnsLeft:  gameTurnsLeft,
 		GameRound:      gameRound,
 	}
-	nextConn := getNextUserClientByUUID(nextUser.UUID)
-	braodCastToSomeone(someoneResponse, nextConn, nextUser)
+	nextConn := getUserClientByUUID(nextUser.UUID)
+	broadCastToSomeone(someoneResponse, nextConn)
+	mutex.Unlock()
 }
 
 func processReadyUser(e WsPayload, response *WsJsonResponse) {
@@ -479,7 +622,10 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 
 	if MaxPlayer == len(getPlayerList()) {
 		gameRound = 1
+		gameTurnsLeft = gameTurnNum * MaxPlayer
 		initGameInfo()
+
+		mutex.Lock()
 		message := Message{
 			Timestamp:   e.Timestamp,
 			MessageId:   int64(len(messages)),
@@ -504,38 +650,13 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 			GameRound:      gameRound,
 		}
 		broadcastToAll(*response)
+		mutex.Unlock()
 
-		nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
-		log.Println("nextUser:", nextUser)
-
-		someoneMessage := Message{
-			Timestamp:   e.Timestamp,
-			MessageId:   int64(len(messages)),
-			User:        adminUser,
-			Message:     fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName),
-			MessageType: "alert",
-		}
-		// messages = append(messages, someoneMessage)
-		someoneResponse := WsJsonResponse{
-			Timestamp:   e.Timestamp,
-			Action:      "your_turn",
-			MessageType: "alert",
-			Message:     someoneMessage.Message,
-			MaxPlayer:   MaxPlayer,
-			// User:           nextUser,
-			User:           adminUser,
-			MessageLogList: messages,
-			PlayerList:     getPlayerList(),
-			OnlineUserList: getUserList(),
-			GameTurnsLeft:  gameTurnsLeft,
-			GameRound:      1,
-		}
-		nextConn := getNextUserClientByUUID(nextUser.UUID)
-		braodCastToSomeone(someoneResponse, nextConn, nextUser)
-
+		processNextTurn(e)
 		return
 	}
 
+	mutex.Lock()
 	*response = WsJsonResponse{
 		Timestamp:      e.Timestamp,
 		Action:         "human_info",
@@ -551,6 +672,7 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 	}
 	isGameStarted = true
 	broadcastToAll(*response)
+	mutex.Unlock()
 
 }
 
@@ -590,7 +712,7 @@ func broadcastToAll(response WsJsonResponse) {
 	log.Println("Broadcasted message")
 }
 
-func braodCastToSomeone(response WsJsonResponse, client WebSocketConnection, user User) {
+func broadCastToSomeone(response WsJsonResponse, client WebSocketConnection) {
 	// mutex.Lock()
 	// defer mutex.Unlock()
 	if err := client.WriteJSON(response); err != nil {
@@ -615,37 +737,24 @@ func getRandomUsername() (int, string) {
 	return -1, ""
 }
 
-// func findUser(uuid string) User {
-// 	for _, v := range players {
-// 		log.Println("v.UUID:", v.UUID)
-// 		if v.UUID == uuid {
-// 			log.Println("dddddddddd")
-// 			log.Println("v:", v)
-// 			v.IsOnline = true
-// 			return v
-// 		}
-// 	}
-// 	return User{}
-// }
-
 func initGameInfo() {
 
 	gameInfo = make([]Game, 0)
 	for i := 0; i < gameRoundNum; i++ {
 		game := Game{
-			NowUserIndex:        0,
-			MaxPlayer:           MaxPlayer,
-			OnlineUserList:      getUserList(),
-			PlayerList:          getPlayerList(),
-			TurnsLeft:           gameTurnNum * MaxPlayer,
-			UserRoundSelections: make([]UserRoundSelection, 0),
+			NowUserIndex:   0,
+			MaxPlayer:      MaxPlayer,
+			OnlineUserList: getUserList(),
+			PlayerList:     getPlayerList(),
+			TurnsLeft:      gameTurnNum * MaxPlayer,
+			UserSelections: make([]UserSelection, 0),
 		}
 		gameInfo = append(gameInfo, game)
 	}
 
 }
 
-func getNextUserClientByUUID(uuid string) WebSocketConnection {
+func getUserClientByUUID(uuid string) WebSocketConnection {
 	for client := range clients {
 		if client.Conn != nil && clients[client].UUID == uuid {
 			return client
@@ -655,6 +764,7 @@ func getNextUserClientByUUID(uuid string) WebSocketConnection {
 }
 
 func broadcastNewMessage(e WsPayload) {
+	mutex.Lock()
 	message := Message{
 		Timestamp:   e.Timestamp,
 		MessageId:   int64(len(messages)),
@@ -679,6 +789,7 @@ func broadcastNewMessage(e WsPayload) {
 		GameRound:      gameRound,
 	}
 	broadcastToAll(response)
+	mutex.Unlock()
 }
 
 func processGameOver(e WsPayload) {
@@ -704,5 +815,190 @@ func processGameOver(e WsPayload) {
 		GameRound:      gameRound,
 	}
 	broadcastToAll(response)
+
+	gameInfo[gameRound-1].UserSelections = make([]UserSelection, 0)
+	gameInfo[gameRound-1].Messages = messages
+}
+
+func findUserInUserSelection(userSelections []UserSelection, user User) (UserSelection, bool) {
+	for _, v := range userSelections {
+		if v.User.UUID == user.UUID {
+			return v, true
+		}
+	}
+	return UserSelection{}, false
+}
+
+func processChooseAI(e WsPayload) {
+	selection := UserSelection{
+		User:      e.User,
+		Selection: e.UserSelection.Selection,
+		Reason:    e.UserSelection.Reason,
+	}
+	userSelections = append(userSelections, selection)
+
+	// next round
+	if len(userSelections) == MaxPlayer {
+		gameInfo[gameRound-1].PlayerList = sorted_players
+		vote, eliminatedPlayer, remainingPlayerList := removePlayerListFromUserSelection(sorted_players)
+		sorted_players = remainingPlayerList
+		mutex.Lock()
+		resultMessage := Message{
+			Timestamp:   e.Timestamp,
+			MessageId:   int64(len(messages)),
+			User:        adminUser,
+			Message:     fmt.Sprintf("%d라운드가 종료되었습니다. 탈락자는 %d표를 받은 [%s]입니다.", gameRound, vote, eliminatedPlayer.UserName),
+			MessageType: "alert",
+		}
+		messages = []Message{resultMessage}
+		resultResponse := WsJsonResponse{
+			Timestamp:      e.Timestamp,
+			Action:         "next_round",
+			MessageType:    "alert",
+			Message:        resultMessage.Message,
+			MaxPlayer:      MaxPlayer,
+			User:           User{},
+			MessageLogList: messages,
+			OnlineUserList: getUserList(),
+			PlayerList:     getPlayerList(),
+			GameTurnsLeft:  gameTurnsLeft,
+			GameRound:      gameRound,
+		}
+		broadcastToAll(resultResponse)
+		mutex.Unlock()
+
+		gameRound++
+
+		if gameRound > gameRoundNum {
+			mutex.Lock()
+			finalMessage := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        adminUser,
+				Message:     fmt.Sprintf("게임이 종료되었습니다. 최종 승자는 [%s]입니다.", sorted_players[0].UserName),
+				MessageType: "alert",
+			}
+			// messages = []Message{resultMessage}
+			finalResponse := WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "game_over",
+				MessageType:    "alert",
+				Message:        finalMessage.Message,
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: messages,
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+			}
+			broadcastToAll(finalResponse)
+			mutex.Unlock()
+
+			return
+
+		}
+
+		gameTurnsLeft = gameTurnNum * len(remainingPlayerList)
+		gameInfo[gameRound-1].TurnsLeft = gameTurnsLeft
+		gameInfo[gameRound-1].PlayerList = remainingPlayerList
+		gameInfo[gameRound-1].NowUserIndex = 0
+		userSelections = make([]UserSelection, 0)
+
+		mutex.Lock()
+		nextMessage := Message{
+			Timestamp:   e.Timestamp,
+			MessageId:   int64(len(messages)),
+			User:        adminUser,
+			Message:     fmt.Sprintf("%d라운드가 시작되었습니다.", gameRound),
+			MessageType: "alert",
+		}
+		messages = append(messages, nextMessage)
+		nextResponse := WsJsonResponse{
+			Timestamp:      e.Timestamp,
+			Action:         "update_state",
+			MessageType:    "alert",
+			Message:        nextMessage.Message,
+			MaxPlayer:      MaxPlayer,
+			User:           User{},
+			MessageLogList: messages,
+			OnlineUserList: getUserList(),
+			PlayerList:     getPlayerList(),
+			GameTurnsLeft:  gameTurnsLeft,
+			GameRound:      gameRound,
+		}
+		broadcastToAll(nextResponse)
+		mutex.Unlock()
+
+		processNextTurn(e)
+
+	}
+}
+func removePlayerListFromUserSelection(playerList []User) (vote int, eliminatedPlayer User, remainingPlayerList []User) {
+	for _, v := range userSelections {
+		log.Println("userSelection:", v.Selection)
+	}
+	votes := make(map[string]int)
+	for _, v := range userSelections {
+		votes[v.Selection]++
+	}
+	log.Println("votes:", votes)
+
+	//sort decreasing order by vote
+	sort.Slice(playerList, func(i, j int) bool {
+		return votes[playerList[i].UserName] > votes[playerList[j].UserName]
+	})
+
+	if len(playerList) > 0 {
+		eliminatedPlayer = playerList[0]
+		remainingPlayerList = playerList[1:]
+	} else {
+		remainingPlayerList = []User{}
+	}
+
+	log.Println("remainingPlayerList:", remainingPlayerList)
+	log.Println("eliminatedPlayer:", eliminatedPlayer)
+
+	return votes[eliminatedPlayer.UserName], eliminatedPlayer, remainingPlayerList
+}
+
+func processNextTurn(e WsPayload) {
+
+	mutex.Lock()
+	nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
+	log.Println("nextUser:", nextUser)
+	someoneMessage := Message{
+		Timestamp:   e.Timestamp,
+		MessageId:   int64(len(messages)),
+		User:        adminUser,
+		Message:     fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName),
+		MessageType: "alert",
+	}
+	// messages = append(messages, someoneMessage)
+	someoneResponse := WsJsonResponse{
+		Timestamp:   e.Timestamp,
+		Action:      "your_turn",
+		MessageType: "alert",
+		Message:     someoneMessage.Message,
+		MaxPlayer:   MaxPlayer,
+		// User:           nextUser,
+		User:           adminUser,
+		MessageLogList: messages,
+		PlayerList:     getPlayerList(),
+		OnlineUserList: getUserList(),
+		GameTurnsLeft:  gameTurnsLeft,
+		GameRound:      1,
+	}
+	nextConn := getUserClientByUUID(nextUser.UUID)
+	broadCastToSomeone(someoneResponse, nextConn)
+	mutex.Unlock()
+}
+
+func makeMessagesFromGameInfo(gameInfo []Game) []Message {
+	messages := make([]Message, 0)
+	for _, v := range gameInfo {
+		messages = append(messages, v.Messages...)
+	}
+	return messages
 
 }

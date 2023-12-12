@@ -46,7 +46,7 @@ export const roomInfoAtom = atomWithReset<Room[]>([
   },
 ]);
 
-export const userAtom = atomWithReset<User>({
+export const userAtom = atom<User>({
   uuid: "",
   user_id: 0,
   nickname_id: 0,

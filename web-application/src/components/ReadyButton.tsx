@@ -1,3 +1,4 @@
+import { initialUserSelection } from "@/store/chatStore";
 import { maxPlayerAtom } from "@/store/gameAtom";
 import { User } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
@@ -22,6 +23,7 @@ export default function ReadyButton({
       message: "",
       game_round: 0,
       game_turns_left: 0,
+      user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
   };

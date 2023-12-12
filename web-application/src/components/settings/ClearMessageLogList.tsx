@@ -1,4 +1,4 @@
-import { adminUser } from "@/store/chatStore";
+import { adminUser, initialUserSelection } from "@/store/chatStore";
 import { maxPlayerAtom } from "@/store/gameAtom";
 import { Message } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
@@ -26,6 +26,7 @@ export default function ClearMessageLogList({
       message: `Clear messages`,
       game_round: 0,
       game_turns_left: 0,
+      user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
   };

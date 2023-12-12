@@ -17,12 +17,11 @@ export default function PlayAndWaitUserList({
   const [playerListTitle, setPlayerListTitle] = useState<string>("Players");
 
   // const playerListTitle = `Players [${playerList.length}/${maxPlayer}]`;
-  console.log(maxPlayer);
   useEffect(() => {
     setPlayerListTitle(`Players [${playerList.length}/${maxPlayer}]`);
   }, [playerList.length, maxPlayer]);
   return (
-    <div className="flex md:flex-col h-full ml-4 md:min-h-[70vh] md:max-h-[70vh] md:w-36 flex-row max-h-full min-h-full">
+    <div className="flex md:flex-col h-full md:ml-4 md:min-h-[70vh] md:max-h-[70vh] md:w-36 flex-row max-h-full min-h-full">
       <OnlineUserList
         name={playerListTitle}
         userData={userData}

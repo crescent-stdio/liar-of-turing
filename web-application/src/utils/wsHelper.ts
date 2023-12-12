@@ -1,5 +1,8 @@
+import { userAtom } from "@/store/chatAtom";
+import { initialUserSelection } from "@/store/chatStore";
 import { User } from "@/types/playerTypes";
-import { WsJsonRequest } from "@/types/wsTypes";
+import { WsJsonRequest, WsJsonResponse } from "@/types/wsTypes";
+import { init } from "next/dist/compiled/webpack/webpack";
 
 export const sendEnterHumanByUUID = (
   socket: WebSocket | null,
@@ -23,6 +26,7 @@ export const sendEnterHumanByUUID = (
     message: "",
     game_round: 0,
     game_turns_left: 0,
+    user_selection: initialUserSelection,
   };
   socket?.send(JSON.stringify(jsonData));
 };
@@ -40,6 +44,7 @@ export const sendEnterHumanByUserData = (
     message: "",
     game_round: 0,
     game_turns_left: 0,
+    user_selection: initialUserSelection,
   };
   socket?.send(JSON.stringify(jsonData));
 };
