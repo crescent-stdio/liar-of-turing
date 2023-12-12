@@ -1,18 +1,39 @@
+import { User } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
 
-export const sendEnterHuman = (socket: WebSocket | null, userUUID: string) => {
+export const sendEnterHumanByUUID = (
+  socket: WebSocket | null,
+  userUUID: string,
+  maxPlayer: number
+) => {
   const jsonData: WsJsonRequest = {
     action: "enter_human",
-    room_id: 0,
+    max_player: maxPlayer,
+    // room_id: 0,
     user: {
       uuid: userUUID,
       user_id: -1,
-      room_id: 0,
       nickname_id: -1,
       username: "",
       role: "human",
       is_online: true,
+      player_type: "player",
     },
+    timestamp: Date.now(),
+    message: "",
+  };
+  socket?.send(JSON.stringify(jsonData));
+};
+
+export const sendEnterHumanByUserData = (
+  socket: WebSocket | null,
+  userData: User,
+  maxPlayer: number
+) => {
+  const jsonData: WsJsonRequest = {
+    action: "enter_human",
+    max_player: maxPlayer,
+    user: userData,
     timestamp: Date.now(),
     message: "",
   };

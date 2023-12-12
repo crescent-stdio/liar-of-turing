@@ -25,6 +25,19 @@ func init() {
 		return
 	}
 	nicknames = global.GetGlobalNicknames()
+
+	// clients[WebSocketConnection{Conn: nil}] = adminUser
+	players["0"] = adminUser
+}
+
+var adminUser = User{
+	UUID:       "0",
+	UserId:     0,
+	UserName:   "server",
+	NicknameId: 999,
+	Role:       "admin",
+	IsOnline:   false,
+	PlayerType: "admin",
 }
 
 var Broadcast = make(chan WsPayload)
@@ -32,6 +45,9 @@ var Broadcast = make(chan WsPayload)
 var clients = make(map[WebSocketConnection]User)
 
 var players = make(map[string]User)
+
+var messages = make([]Message, 0)
+var MaxPlayer = 2
 
 // upgradeConnection is the websocket upgrader from gorilla/websockets
 var upgradeConnection = websocket.Upgrader{
@@ -54,22 +70,34 @@ func (conn *WebSocketConnection) SafeClose() {
 
 // WsJsonResponse defines the response sent back from websocket
 type WsJsonResponse struct {
-	Timestamp      int64  `json:"timestamp"`
-	Action         string `json:"action"`
-	User           User   `json:"user"`
-	Message        string `json:"message"`
-	MessageType    string `json:"message_type"`
-	OnlineUserList []User `json:"online_user_list"`
+	Timestamp      int64     `json:"timestamp"`
+	MaxPlayer      int       `json:"max_player"`
+	Action         string    `json:"action"`
+	User           User      `json:"user"`
+	Message        string    `json:"message"`
+	MessageType    string    `json:"message_type"`
+	MessageLogList []Message `json:"message_log_list"`
+	OnlineUserList []User    `json:"online_user_list"`
+	PlayerList     []User    `json:"player_list"`
 }
 
 type User struct {
-	UUID       string `json:"uuid"`
-	UserId     int64  `json:"user_id"`
-	RoomId     int64  `json:"room_id"`
+	UUID   string `json:"uuid"`
+	UserId int64  `json:"user_id"`
+	// RoomId     int64  `json:"room_id"`
 	NicknameId int    `json:"nickname_id"`
 	UserName   string `json:"username"`
 	Role       string `json:"role"`
 	IsOnline   bool   `json:"is_online"`
+	PlayerType string `json:"player_type"`
+}
+
+type Message struct {
+	Timestamp   int64  `json:"timestamp"`
+	MessageId   int64  `json:"message_id"`
+	User        User   `json:"user"`
+	Message     string `json:"message"`
+	MessageType string `json:"message_type"`
 }
 
 func sortUserList(users []User) []User {
@@ -81,12 +109,14 @@ func sortUserList(users []User) []User {
 
 // WsPayload defines the websocket request from the client
 type WsPayload struct {
-	Action    string              `json:"action"`
-	RoomId    int64               `json:"room_id"`
+	Action string `json:"action"`
+	// RoomId    int64               `json:"room_id"`
+	MaxPlayer int                 `json:"max_player"`
 	User      User                `json:"user"`
 	Timestamp int64               `json:"timestamp"`
 	Message   string              `json:"message"`
 	Conn      WebSocketConnection `json:"-"` // ignore this field
+
 }
 
 // WsEndpoint upgrades connection to websocket
@@ -142,23 +172,42 @@ func ListenToWsChannel() {
 		log.Printf("Action: %s, User: %v\n", e.Action, e.User)
 
 		mutex.Lock()
+		// MaxPlayer = e.MaxPlayer
+		log.Println("MaxPlayer:", MaxPlayer)
+		log.Println("messages:", messages)
 		switch e.Action {
 		case "new_message", "broadcast":
+			message := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        e.User,
+				Message:     e.Message,
+				MessageType: "message",
+			}
+			messages = append(messages, message)
+
 			response = WsJsonResponse{
 				Timestamp:      e.Timestamp,
 				Action:         e.Action,
 				User:           e.User,
 				Message:        e.Message,
+				MessageLogList: messages,
 				MessageType:    "message",
+				MaxPlayer:      MaxPlayer,
+
 				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
 			}
 
 		case "list_users":
 			response = WsJsonResponse{
 				Timestamp:      e.Timestamp,
-				Action:         "user_list",
+				Action:         "update_status",
 				MessageType:    "info",
+				MessageLogList: messages,
+				MaxPlayer:      MaxPlayer,
 				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
 			}
 
 		case "enter_human":
@@ -166,7 +215,31 @@ func ListenToWsChannel() {
 
 		case "left_user":
 			processLeftUser(e, &response)
+		case "user_is_ready":
+			processReadyUser(e, &response)
+		case "set_max_player":
+			MaxPlayer = e.MaxPlayer
+			log.Println("e.MaxPlayer:", MaxPlayer)
+			message := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        e.User,
+				Message:     fmt.Sprintf("최대 인원이 %d명으로 설정되었습니다.", MaxPlayer),
+				MessageType: "alert",
+			}
+			messages = append(messages, message)
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "update_state",
+				MessageType:    "alert",
+				Message:        message.Message,
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: messages,
 
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+			}
 		default:
 			log.Printf("Unknown action: %s\n", e.Action)
 		}
@@ -189,6 +262,7 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 			Role:       "human",
 			UUID:       e.User.UUID,
 			IsOnline:   true,
+			PlayerType: "watcher",
 		}
 		// players[e.User.UUID] = nowUser
 	}
@@ -198,12 +272,15 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 	clients[e.Conn] = nowUser
 
 	*response = WsJsonResponse{
+		MaxPlayer:      MaxPlayer,
 		Timestamp:      e.Timestamp,
 		Action:         "human_info",
 		MessageType:    "system",
 		Message:        fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName),
+		MessageLogList: messages,
 		User:           nowUser,
 		OnlineUserList: getUserList(),
+		PlayerList:     getPlayerList(),
 	}
 }
 
@@ -216,28 +293,95 @@ func processLeftUser(e WsPayload, response *WsJsonResponse) {
 		e.Conn.SafeClose()
 
 		*response = WsJsonResponse{
-			Action:         "user_list",
+			Action:    "update_state",
+			Timestamp: e.Timestamp,
+			MaxPlayer: MaxPlayer,
+
+			// Action:         "user_list",
+			MessageLogList: messages,
 			OnlineUserList: getUserList(),
+			PlayerList:     getPlayerList(),
 		}
 	} else {
 		log.Println("User not found in clients map")
 		// *response = WsJsonResponse{} // Empty response
 		*response = WsJsonResponse{
-			Action:         "user_list",
+			Action:    "update_state",
+			Timestamp: e.Timestamp,
+			// Action:         "user_list",
+			MessageLogList: messages,
 			OnlineUserList: getUserList(),
+			MaxPlayer:      MaxPlayer,
+			PlayerList:     getPlayerList(),
 		}
 	}
+}
+
+func processReadyUser(e WsPayload, response *WsJsonResponse) {
+	nowUser := players[e.User.UUID]
+	nowUser.PlayerType = "player"
+	log.Println(nowUser.NicknameId)
+	players[e.User.UUID] = nowUser
+	clients[e.Conn] = nowUser
+
+	if MaxPlayer == len(getPlayerList()) {
+		message := Message{
+			Timestamp:   e.Timestamp,
+			MessageId:   int64(len(messages)),
+			User:        adminUser,
+			Message:     "게임이 시작되었습니다.",
+			MessageType: "alert",
+		}
+		messages = []Message{message}
+
+		*response = WsJsonResponse{
+			Timestamp:      e.Timestamp,
+			Action:         "update_state",
+			MessageType:    "alert",
+			Message:        message.Message,
+			MaxPlayer:      MaxPlayer,
+			User:           User{},
+			MessageLogList: messages,
+			PlayerList:     getPlayerList(),
+			OnlineUserList: getUserList(),
+		}
+		return
+	}
+
+	*response = WsJsonResponse{
+		Timestamp:      e.Timestamp,
+		Action:         "human_info",
+		MessageType:    "system",
+		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
+		User:           nowUser,
+		OnlineUserList: getUserList(),
+		MessageLogList: messages,
+		MaxPlayer:      MaxPlayer,
+		PlayerList:     getPlayerList(),
+	}
+
 }
 
 func getUserList() []User {
 	var userList []User
 	for _, v := range players { //TODO:  or clients?
-		if v.UserName != "server" && v.IsOnline {
+		if v.UserName != "admin" && v.IsOnline {
 			userList = append(userList, v)
 		}
 	}
-	sortUserList(userList)
+	// sortUserList(userList)
 	return userList
+}
+
+func getPlayerList() []User {
+	var playerList []User
+	for _, v := range players { //TODO:  or clients?
+		if v.UserName != "admin" && v.IsOnline && v.PlayerType == "player" {
+			playerList = append(playerList, v)
+		}
+	}
+	// sortUserList(userList)
+	return playerList
 }
 
 func broadcastToAll(response WsJsonResponse) {

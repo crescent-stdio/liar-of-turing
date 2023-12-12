@@ -1,7 +1,7 @@
-import { Player } from "@/types/playerTypes";
+import { User } from "@/types/playerTypes";
 import crypto from "crypto";
 
-const setIsLiars = (players: Player[], liars: number[]) => {
+const setIsLiars = (players: User[], liars: number[]) => {
   const newPlayers = [...players];
   liars.forEach((liar) => {
     newPlayers[liar].role = "liar";
