@@ -21,6 +21,8 @@ export const sendEnterHumanByUUID = (
     },
     timestamp: Date.now(),
     message: "",
+    game_round: 0,
+    game_turns_left: 0,
   };
   socket?.send(JSON.stringify(jsonData));
 };
@@ -36,6 +38,8 @@ export const sendEnterHumanByUserData = (
     user: userData,
     timestamp: Date.now(),
     message: "",
+    game_round: 0,
+    game_turns_left: 0,
   };
   socket?.send(JSON.stringify(jsonData));
 };

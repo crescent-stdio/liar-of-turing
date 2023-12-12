@@ -21,8 +21,11 @@ const ChatTimeline: React.FC<ChatTimelineProps> = ({
 
   return (
     <div className="flex-1 min-h-[70vh] max-h-[70vh]">
-      <h3 className="mt-4 font-bold text-xl">Chat</h3>
-      <ul className="overflow-y-scroll max-h-[60vh] my-4" id="messageLogList">
+      <h3 className="font-bold text-xl">Chat</h3>
+      <ul
+        className="overflow-y-scroll min-h-[60vh] max-h-[60vh] md:min-h-[65vh] md:max-h-[65vh] my-4"
+        id="messageLogList"
+      >
         {messageLogList &&
           messageLogList.length > 0 &&
           messageLogList.map((messageLog: Message, idx) => {

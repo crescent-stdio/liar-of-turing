@@ -22,7 +22,7 @@ export default function PlayAndWaitUserList({
     setPlayerListTitle(`Players [${playerList.length}/${maxPlayer}]`);
   }, [playerList.length, maxPlayer]);
   return (
-    <div className="flex flex-col h-full ml-4 min-h-[70vh] max-h-[70vh]">
+    <div className="flex md:flex-col h-full ml-4 md:min-h-[70vh] md:max-h-[70vh] md:w-36 flex-row max-h-full min-h-full">
       <OnlineUserList
         name={playerListTitle}
         userData={userData}

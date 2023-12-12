@@ -19,6 +19,8 @@ export default function SetMaxPayer({ sendMessage }: SetMaxPayerProps) {
       timestamp: Date.now(),
       user: adminUser,
       message: `Set max player to ${player}`,
+      game_round: 0,
+      game_turns_left: 0,
     };
     sendMessage(jsonData);
     setMaxPlayer(player);

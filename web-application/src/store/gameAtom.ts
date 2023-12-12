@@ -16,3 +16,11 @@ export const isUserJoinGameAtom = atom<boolean>((get) => {
   const user = get(userAtom);
   return isGameStarted && user.player_type === "player";
 });
+
+export const isYourTurnAtom = atom<boolean>(false);
+export const gameRoundAtom = atom<number>(0);
+// export const gameRoundMaxAtom = atom<number>(GAME_ROUND_MA);
+export const gameTurnsLeftAtom = atom<number>(0);
+// export const gameTurnsMaxAtom = atom<number>(0);
+
+export const isFinishedRoundAtom = atom<boolean>(false);

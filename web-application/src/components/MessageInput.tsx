@@ -1,8 +1,13 @@
 import useMessageInput from "@/hook/useMessageInput";
-import { maxPlayerAtom } from "@/store/gameAtom";
+import {
+  gameRoundAtom,
+  gameTurnsLeftAtom,
+  isYourTurnAtom,
+  maxPlayerAtom,
+} from "@/store/gameAtom";
 import { User } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 
 type MessageInputProps = {
   userData: User;
@@ -21,6 +26,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
     resetMessage,
   } = useMessageInput();
   const maxPlayer = useAtomValue(maxPlayerAtom);
+  const [, setIsYourTurn] = useAtom(isYourTurnAtom);
+  const gameTurnsLeft = useAtomValue(gameTurnsLeftAtom);
+  const gameRound = useAtomValue(gameRoundAtom);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     handleCustomSubmit(event);
@@ -30,9 +38,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
       user: userData,
       timestamp: Date.now(),
       message: message,
+      game_round: gameRound,
+      game_turns_left: gameTurnsLeft,
     };
     sendMessage(jsonData);
     resetMessage();
+    setIsYourTurn(false);
   };
 
   return (

@@ -32,10 +32,12 @@ const AdminMessageSender: React.FC<AdminMessageSenderProps> = ({
       if (!testUserData) return;
       const jsonData: WsJsonRequest = {
         max_player: maxPlayer,
-        action: "new_message",
+        action: "new_message_admin",
         user: testUserData,
         timestamp: Date.now(),
         message: testMessage,
+        game_round: 0,
+        game_turns_left: 0,
       };
       sendMessage(jsonData);
       setTestMessage("");

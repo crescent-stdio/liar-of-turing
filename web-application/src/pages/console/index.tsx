@@ -1,8 +1,8 @@
 import AdminMessageSender from "@/components/settings/AdminMessageSender";
 import SetMaxPayer from "@/components/settings/SetMaxPlayer";
+import ClearMessageLogList from "@/components/settings/clearMessageLogList";
 import useWebSocket from "@/hook/useWebSocket";
 import { adminUser } from "@/store/chatStore";
-import { getUserUUID } from "@/utils/liarHelper";
 
 export default function Console() {
   const {
@@ -22,6 +22,10 @@ export default function Console() {
       <SetMaxPayer sendMessage={handleWebSocketMessageSend} />
       <AdminMessageSender
         userList={fullUserList}
+        sendMessage={handleWebSocketMessageSend}
+      />
+      <ClearMessageLogList
+        messageLogList={messageLogList}
         sendMessage={handleWebSocketMessageSend}
       />
     </main>

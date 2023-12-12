@@ -11,6 +11,8 @@ export interface WsJsonResponse {
   message_log_list: Message[];
   online_user_list: User[];
   player_list: User[];
+  game_round: number;
+  game_turns_left: number;
 }
 export interface WsJsonRequest {
   max_player: number;
@@ -19,6 +21,8 @@ export interface WsJsonRequest {
   user: User;
   timestamp: number;
   message: string;
+  game_round: number;
+  game_turns_left: number;
 }
 
 // export interface User {

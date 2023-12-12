@@ -20,6 +20,8 @@ export default function ReadyButton({
       user: userData,
       timestamp: Date.now(),
       message: "",
+      game_round: 0,
+      game_turns_left: 0,
     };
     sendMessage(jsonData);
   };
