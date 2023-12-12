@@ -15,7 +15,8 @@ import {
 import VerticalLine from "@/components/Line/VerticalLine";
 import HorizontalLine from "@/components/Line/HorizontalLine";
 import ShowGameStatus from "@/components/ShowGameStatus";
-import ChooseAIInput from "@/components/ChooseAIInput";
+import ChooseAIInput from "@/components/game/ChooseAIInput";
+import WaitingForSelection from "@/components/game/WaitingForSelection";
 
 export default function Page() {
   const {
@@ -65,6 +66,9 @@ export default function Page() {
           userList={userList}
           sendMessage={handleWebSocketMessageSend}
         />
+      )}
+      {isFinishedRound && user && user.player_type !== "player" && (
+        <WaitingForSelection />
       )}
     </main>
   );
