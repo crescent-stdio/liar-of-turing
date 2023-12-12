@@ -2,7 +2,7 @@ import React from "react";
 import OnlineUserList from "@/components/OnlineUserList";
 import MessageInput from "@/components/MessageInput";
 import TimerDisplay from "@/components/TimeDisplay";
-import DebugPanel from "@/components/DebugPanel";
+import DebugPanel from "@/components/settings/AdminMessageSender";
 import useWebSocket from "@/hook/useWebSocket";
 import useTimer from "@/hook/useTimer";
 import { getUserUUID } from "@/utils/liarHelper";
@@ -20,7 +20,7 @@ export default function Page() {
     user,
     messageLogList,
     handleWebSocketMessageSend,
-  } = useWebSocket(getUserUUID());
+  } = useWebSocket(getUserUUID(), null);
   const [isGameStarted] = useAtom(isGameStartedAtom);
   const [isUserJoinGame] = useAtom(isUserJoinGameAtom);
 
@@ -48,10 +48,6 @@ export default function Page() {
           sendMessage={handleWebSocketMessageSend}
         />
       )}
-      <DebugPanel
-        userList={userList}
-        sendMessage={handleWebSocketMessageSend}
-      />
     </main>
   );
 }

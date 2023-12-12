@@ -1,6 +1,9 @@
 import { Message, Room, User } from "@/types/playerTypes";
-import { atom } from "jotai";
+import { SetStateAction, WritableAtom, atom, useAtom, useSetAtom } from "jotai";
 import { atomWithReset } from "jotai/utils";
+import { initialMessage } from "./chatStore";
+import { Update } from "next/dist/build/swc";
+import { WsJsonResponse } from "@/types/wsTypes";
 
 export const roomListAtom = atomWithReset<Room[]>(
   Array(1)
@@ -56,7 +59,6 @@ export const userAtom = atomWithReset<User>({
 export const userListAtom = atom<User[]>([]);
 export const playerListAtom = atom<User[]>((get: any) => {
   const userList = get(userListAtom);
-  console.log("userList", userList);
   const playerList = userList.filter((user: User) => {
     return user.player_type === "player";
   });
@@ -71,23 +73,29 @@ export const watcherListAtom = atom<User[]>((get: any) => {
   return watcherList;
 });
 
-export const messageAtom = atomWithReset<string>("");
+export const chatAtom = atomWithReset<string>("");
 
-export const messageLogAtom = atomWithReset<Message>({
-  timestamp: 0,
-  message_id: 0,
-  user: {
-    uuid: "",
-    user_id: 0,
-    nickname_id: 0,
-    username: "",
-    role: "",
-    is_online: false,
-    player_type: "",
-  },
-  message: "",
-  message_type: "",
-});
+export const chatLogAtom = atom<Message>(initialMessage);
+export const updateChatLog: (set: any, data: WsJsonResponse | null) => void = (
+  set,
+  data
+) => {
+  if (!data) {
+    set(chatLogAtom, initialMessage);
+  } else {
+    const message = {
+      message_id: data.message_id,
+      timestamp: data.timestamp,
+      user: data.user,
+      message: data.message,
+      message_type: data.message_type,
+    };
+    set(chatLogAtom, message);
+  }
+};
+
+export const chatLogListAtom = atomWithReset<Message[]>([]);
+
 export const messageLogListAtom = atomWithReset<Message[]>([]);
 
 export const socketAtom = atomWithReset<WebSocket | null>(null);

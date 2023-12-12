@@ -1,4 +1,4 @@
-import { messageAtom } from "@/store/chatAtom";
+import { chatAtom } from "@/store/chatAtom";
 import { useAtom } from "jotai";
 
 export interface MessageInputHook {
@@ -9,7 +9,7 @@ export interface MessageInputHook {
 }
 
 export default function useMessageInput(): MessageInputHook {
-  const [message, setMessage] = useAtom(messageAtom);
+  const [message, setMessage] = useAtom(chatAtom);
 
   // Handles the change in the input field
   const handleMessageChange = (event: React.ChangeEvent<HTMLInputElement>) => {

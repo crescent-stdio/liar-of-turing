@@ -1,5 +1,7 @@
+import { maxPlayerAtom } from "@/store/gameAtom";
 import { User } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
+import { useAtomValue } from "jotai";
 
 type ReadyButtonProps = {
   userData: User;
@@ -9,8 +11,11 @@ export default function ReadyButton({
   userData,
   sendMessage,
 }: ReadyButtonProps) {
+  const maxPlayer = useAtomValue(maxPlayerAtom);
+
   const handleReady = () => {
     const jsonData: WsJsonRequest = {
+      max_player: maxPlayer,
       action: "user_is_ready",
       user: userData,
       timestamp: Date.now(),

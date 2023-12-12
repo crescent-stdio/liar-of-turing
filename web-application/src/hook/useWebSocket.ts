@@ -1,24 +1,40 @@
 import {
+  chatAtom,
+  chatLogAtom,
   messageLogListAtom,
   socketAtom,
+  updateChatLog,
   userAtom,
   userListAtom,
 } from "@/store/chatAtom";
-import { Message } from "@/types/playerTypes";
+import { initialMessage } from "@/store/chatStore";
+import { maxPlayerAtom } from "@/store/gameAtom";
+import { Message, User } from "@/types/playerTypes";
 import { WsJsonRequest, WsJsonResponse } from "@/types/wsTypes";
 import { getUserUUID } from "@/utils/liarHelper";
-import { sendEnterHuman, sendLeftUser } from "@/utils/wsHelper";
-import { useAtom } from "jotai";
+import {
+  sendEnterHumanByUUID,
+  sendEnterHumanByUserData,
+  sendLeftUser,
+} from "@/utils/wsHelper";
+import { atom, useAtom, useAtomValue } from "jotai";
+import { useResetAtom } from "jotai/utils";
 import { useState, useEffect, useCallback } from "react";
 
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "";
 
-export default function useWebSocket(userUUID: string) {
+export default function useWebSocket(
+  userUUID: string | null,
+  userData: User | null
+) {
   const [socket, setSocket] = useAtom(socketAtom);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [userList, setUserList] = useAtom(userListAtom);
   const [user, setUser] = useAtom(userAtom);
   const [messageLogList, setMessageLogList] = useAtom(messageLogListAtom);
+  const [, setChatLog] = useAtom(chatLogAtom);
+  const [maxPlayer, setMaxPlayer] = useAtom(maxPlayerAtom);
+  // const [];
 
   // Function to handle incoming WebSocket messages
   const handleWebSocketMessage = useCallback((event: MessageEvent) => {
@@ -29,64 +45,57 @@ export default function useWebSocket(userUUID: string) {
       case "human_info":
         setUserList(() => {
           if (!data.online_user_list) return [];
-          return data.online_user_list;
+          return data.online_user_list.filter((user) => user.role !== "admin");
         });
-        if (userUUID === data.user.uuid) {
+        if (userUUID && userUUID === data.user.uuid) {
           setUser(data.user);
         }
-        setMessageLogList((messageLogList: Message[]) => {
-          const message = {
-            message_id: data.message_id,
-            timestamp: data.timestamp,
-            user: data.user,
-            message: data.message,
-            message_type: data.message_type,
-          };
-          return [...messageLogList, message];
+
+        updateChatLog(setChatLog, data);
+
+        setMaxPlayer(data.max_player);
+        setMessageLogList(() => {
+          if (!data.message_log_list) return [];
+          return data.message_log_list;
         });
 
         break;
       case "user_list":
         console.log("user_list", data.online_user_list);
 
+        setMaxPlayer(data.max_player);
         setUserList(() => {
           if (!data.online_user_list) return [];
-          return data.online_user_list;
+          return data.online_user_list.filter((user) => user.role !== "admin");
         });
 
         break;
       case "new_message":
         console.log("Message", data);
-        setMessageLogList((messageLogList: Message[]) => {
-          const message = {
-            message_id: data.message_id,
-            timestamp: data.timestamp,
-            user: data.user,
-            message: data.message,
-            message_type: data.message_type,
-          };
-          return [...messageLogList, message];
+        updateChatLog(setChatLog, data);
+
+        setMaxPlayer(data.max_player);
+        setMessageLogList(() => {
+          if (!data.message_log_list) return [];
+          return data.message_log_list;
         });
 
         break;
       case "update_state":
         console.log("update_state", data);
-        setUser(data.user);
+        if (data.user.uuid === userUUID) {
+          setUser(data.user);
+        }
+        setMaxPlayer(data.max_player);
         setUserList(() => {
           if (!data.online_user_list) return [];
-          return data.online_user_list;
+          return data.online_user_list.filter((user) => user.role !== "admin");
         });
-        setMessageLogList((messageLog: Message[]) => {
-          const message = {
-            message_id: data.message_id,
-            timestamp: data.timestamp,
-            user: data.user,
-            message: data.message,
-            message_type: data.message_type,
-          };
-          return [...messageLog, message];
+        updateChatLog(setChatLog, data);
+        setMessageLogList(() => {
+          if (!data.message_log_list) return [];
+          return data.message_log_list;
         });
-
         break;
     }
   }, []);
@@ -112,7 +121,9 @@ export default function useWebSocket(userUUID: string) {
     if (socket) {
       socket.onopen = () => {
         console.log("connected!!");
-        sendEnterHuman(socket, userUUID);
+        if (userUUID) sendEnterHumanByUUID(socket, userUUID, maxPlayer);
+        else if (userData)
+          sendEnterHumanByUserData(socket, userData, maxPlayer);
       };
       socket.onmessage = handleWebSocketMessage;
       socket.onclose = handleWebSocketClose;

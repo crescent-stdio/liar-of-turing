@@ -1,13 +1,14 @@
 import { atomWithReset } from "jotai/utils";
 import { MAX_PLAYER } from "./gameStore";
 import { playerListAtom, userAtom } from "./chatAtom";
-import { atom } from "jotai";
+import { atom, useAtomValue } from "jotai";
 
-export const maxPlayerAtom = atomWithReset<number>(MAX_PLAYER);
+export const maxPlayerAtom = atom<number>(MAX_PLAYER);
 
 export const isGameStartedAtom = atom<boolean>((get) => {
   const playerList = get(playerListAtom);
-  return playerList.length === MAX_PLAYER;
+  const maxPlayer = get(maxPlayerAtom);
+  return playerList.length === maxPlayer;
 });
 
 export const isUserJoinGameAtom = atom<boolean>((get) => {

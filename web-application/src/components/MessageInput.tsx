@@ -1,6 +1,8 @@
 import useMessageInput from "@/hook/useMessageInput";
+import { maxPlayerAtom } from "@/store/gameAtom";
 import { User } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
+import { useAtomValue } from "jotai";
 
 type MessageInputProps = {
   userData: User;
@@ -18,10 +20,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
     handleSubmit: handleCustomSubmit,
     resetMessage,
   } = useMessageInput();
+  const maxPlayer = useAtomValue(maxPlayerAtom);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     handleCustomSubmit(event);
     const jsonData: WsJsonRequest = {
+      max_player: maxPlayer,
       action: "new_message",
       user: userData,
       timestamp: Date.now(),
