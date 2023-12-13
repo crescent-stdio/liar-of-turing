@@ -17,6 +17,8 @@ import {
   isGameStartedAtom,
   isYourTurnAtom,
   maxPlayerAtom,
+  userSelectionAtom,
+  userSelectionListAtom,
 } from "@/store/gameAtom";
 import { Message, User } from "@/types/playerTypes";
 import { WsJsonRequest, WsJsonResponse } from "@/types/wsTypes";
@@ -55,6 +57,8 @@ export default function useWebSocket(
   );
   const [, setGameRoundNum] = useAtom(gameRoundAtom);
   const [, setGameTurnsNum] = useAtom(gameTurnsLeftAtom);
+  const [, setUserSelection] = useAtom(userSelectionAtom);
+  const [, setUserSelectionList] = useAtom(userSelectionListAtom);
 
   // Function to handle incoming WebSocket messages
   const handleWebSocketMessage = useCallback((event: MessageEvent) => {
@@ -62,6 +66,14 @@ export default function useWebSocket(
     console.log("Received action:", data.action);
 
     switch (data.action) {
+      case "send_result":
+        console.log("send_result", data);
+        setMessageLogList(() => {
+          if (!data.message_log_list) return [];
+          return data.message_log_list;
+        });
+        setUserSelectionList(data.user_selections_list);
+        break;
       case "choose_ai":
         console.log("choose_ai", data);
 
@@ -141,6 +153,10 @@ export default function useWebSocket(
           if (!data.online_user_list) return [];
           return data.online_user_list.filter((user) => user.role !== "admin");
         });
+        setPlayerList(() => {
+          if (!data.player_list) return [];
+          return data.player_list;
+        });
         setMessageLogList(() => {
           if (!data.message_log_list) return [];
           return data.message_log_list;
@@ -216,6 +232,7 @@ export default function useWebSocket(
     if (data.max_player) setMaxPlayer(data.max_player);
     if (data.player_list && data.player_list.length >= 0)
       setPlayerList(data.player_list);
+    if (data.is_game_started) setIsGameStarted(data.is_game_started);
     // }, []);
   }, []); // Add other dependencies as needed
 
