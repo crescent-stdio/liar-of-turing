@@ -1,5 +1,5 @@
 # 베이스 이미지 선택
-FROM python:3.10.0a7-slim-buster
+FROM python:3.9-alpine
 
 # 작업 디렉토리 설정
 WORKDIR /app
