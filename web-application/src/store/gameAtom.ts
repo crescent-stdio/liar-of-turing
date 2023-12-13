@@ -2,6 +2,8 @@ import { atomWithReset } from "jotai/utils";
 import { GAME_ROUND_NUM, GAME_TURNS_NUM, MAX_PLAYER } from "./gameStore";
 import { playerListAtom, userAtom } from "./chatAtom";
 import { atom, useAtomValue } from "jotai";
+import { UserSelection } from "@/types/wsTypes";
+import { initialUserSelection } from "./chatStore";
 
 export const maxPlayerAtom = atom<number>(MAX_PLAYER);
 
@@ -27,3 +29,6 @@ export const gameTurnsNumAtom = atom<number>(GAME_TURNS_NUM);
 export const isFinishedRoundAtom = atom<boolean>(false);
 
 export const isFinishedSubmitionAtom = atom<boolean>(false);
+
+export const userSelectionAtom = atom<UserSelection>(initialUserSelection);
+export const userSelectionListAtom = atom<UserSelection[]>([]);

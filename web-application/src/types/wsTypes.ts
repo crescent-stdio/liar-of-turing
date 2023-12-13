@@ -13,6 +13,9 @@ export interface WsJsonResponse {
   player_list: User[];
   game_round: number;
   game_turns_left: number;
+  is_game_started: boolean;
+  is_game_over: boolean;
+  user_selections_list: UserSelection[];
 }
 export interface WsJsonRequest {
   action: string;
