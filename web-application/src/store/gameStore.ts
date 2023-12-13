@@ -1,6 +1,6 @@
 export const TIMER_TIME = 50;
 
-export const MAX_PLAYER = 2;
+export const MAX_PLAYER = 5;
 
 export const GAME_TURNS_MAX = 3;
 

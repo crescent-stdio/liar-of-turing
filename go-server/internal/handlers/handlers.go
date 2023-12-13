@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"liarOfTuring/global"
 	"liarOfTuring/models"
 	"liarOfTuring/utils"
@@ -15,6 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var FastAPIURL = ""
 var mutex = &sync.Mutex{}
 var nicknames []models.Nickname
 
@@ -28,6 +32,9 @@ func init() {
 
 	// clients[WebSocketConnection{Conn: nil}] = adminUser
 	players["0"] = adminUser
+	GPTEnterNum, GPTReadyNum = randomChooseReadyUserAndEnterUser(MaxPlayer)
+	//env
+
 }
 
 var adminUser = User{
@@ -40,7 +47,19 @@ var adminUser = User{
 	PlayerType: "admin",
 }
 
+var GPTUser = User{
+	UUID:       "999",
+	UserId:     999,
+	UserName:   "",
+	NicknameId: 999,
+	Role:       "player",
+	IsOnline:   false,
+	PlayerType: "watcher",
+}
+var GPTEnterNum = 1
+var GPTReadyNum = 0
 var Broadcast = make(chan WsPayload)
+var GPTBroadcast = make(chan GPTWsPayload)
 
 var clients = make(map[WebSocketConnection]User)
 
@@ -48,12 +67,13 @@ var players = make(map[string]User)
 var sorted_players = make([]User, 0)
 
 var messages = make([]Message, 0)
-var MaxPlayer = 2
+var MaxPlayer = 5
 
 var gameRoundNum = 2
 var gameTurnNum = 1
 
 var isGameStarted = false
+var isGameOver = false
 var gameInfo = make([]Game, 0)
 var gameTurnsLeft = gameTurnNum * MaxPlayer
 var gameRound = 1
@@ -138,6 +158,65 @@ func sortUserList(users []User) []User {
 	return users
 }
 
+func randomSuffleUserList(users []User) []User {
+	seed := time.Now().UnixNano()
+	src := rand.NewSource(seed)
+	rand := rand.New(src)
+
+	rand.Shuffle(len(users), func(i, j int) { users[i], users[j] = users[j], users[i] })
+	readyNum := rand.Intn(MaxPlayer-2) + 2
+
+	//swap users
+	//find GPTUser
+	for i, user := range users {
+		if user.UUID == GPTUser.UUID {
+			users[i] = users[readyNum]
+			users[readyNum] = user
+			break
+		}
+	}
+
+	//getRandomUsername
+	for i, user := range users {
+		nicknameId, userName := getRandomUsername()
+		users[i] = User{
+			UserId:     user.UserId,
+			UserName:   userName,
+			NicknameId: nicknameId,
+			Role:       user.Role,
+			UUID:       user.UUID,
+			IsOnline:   user.IsOnline,
+			PlayerType: user.PlayerType,
+		}
+		for conn, client := range clients {
+			if client.UUID == user.UUID {
+				clients[conn] = users[i]
+				break
+			}
+		}
+		if players[user.UUID].UUID == user.UUID {
+			players[user.UUID] = users[i]
+		}
+		if user.UUID == GPTUser.UUID {
+			GPTUser = users[i]
+		}
+
+	}
+	return users
+}
+
+func randomChooseReadyUserAndEnterUser(max_player int) (int, int) {
+	seed := time.Now().UnixNano()
+	src := rand.NewSource(seed)
+	rand := rand.New(src)
+
+	//1 to max_player-2
+	enterNum := rand.Intn(max_player-2) + 1
+	// 2 to max_player-1
+	readyNum := rand.Intn(max_player-2) + 2
+	return enterNum, readyNum
+}
+
 // WsPayload defines the websocket request from the client
 type WsPayload struct {
 	Action string `json:"action"`
@@ -152,6 +231,18 @@ type WsPayload struct {
 	GameRoundNum  int                 `json:"game_round_num"`
 	UserSelection UserSelection       `json:"user_selection"`
 	Conn          WebSocketConnection `json:"-"` // ignore this field
+}
+
+type GPTWsPayload struct {
+	UserUUID string              `json:"user_uuid"`
+	Message  string              `json:"message"`
+	Conn     WebSocketConnection `json:"-"`
+}
+
+type GPTWsJsonResponse struct {
+	UserUUID         string `json:"user_uuid"`
+	MessageLogString string `json:"message_log_string"`
+	MessageType      string `json:"message_type"`
 }
 
 func Max(a, b int) int {
@@ -175,6 +266,48 @@ func WsEndpoint(w http.ResponseWriter, r *http.Request) {
 	go ListenForWs(&conn)
 }
 
+func WithGPTWsEndpoint(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgradeConnection.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Error upgrading to WebSocket:", err)
+		return
+	}
+
+	conn := WebSocketConnection{Conn: ws}
+	log.Println("Client connected to endpoint")
+
+	go ListenForGPTWs(&conn)
+}
+
+func ListenForGPTWs(conn *WebSocketConnection) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in ListenForGPTWs:", r)
+		}
+		conn.SafeClose() // Safely close the connection
+		mutex.Lock()
+		delete(clients, *conn) // Remove the client from the map
+		mutex.Unlock()
+	}()
+
+	var payload GPTWsPayload
+
+	for {
+		err := conn.ReadJSON(&payload)
+		if err != nil {
+			// Check if the error is a normal WebSocket closure
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+				log.Printf("Client disconnected: %v\n", err)
+			} else {
+				log.Printf("Error reading json: %v\n", err)
+			}
+			break // Exit loop on client disconnection or error
+		}
+
+		payload.Conn = *conn
+		GPTBroadcast <- payload
+	}
+}
 func ListenForWs(conn *WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -202,6 +335,33 @@ func ListenForWs(conn *WebSocketConnection) {
 
 		payload.Conn = *conn
 		Broadcast <- payload
+	}
+}
+func ListenToGPTWsChannel(fastAPIURL string) {
+	FastAPIURL = fastAPIURL
+	var response WsJsonResponse
+	for {
+		e := <-GPTBroadcast
+		log.Println("GPTBroadcast:", e)
+		mutex.Lock()
+		message := Message{
+			Timestamp:   getTimeStamp(),
+			MessageId:   int64(len(messages)),
+			User:        GPTUser,
+			Message:     e.Message,
+			MessageType: "message",
+		}
+		messages = append(messages, message)
+		response = WsJsonResponse{
+			Timestamp:      getTimeStamp(),
+			Action:         "new_message",
+			User:           GPTUser,
+			Message:        e.Message,
+			MessageLogList: messages,
+			MessageType:    "message",
+			MaxPlayer:      MaxPlayer,
+		}
+		broadcastToAll(response)
 	}
 }
 
@@ -272,7 +432,7 @@ func ListenToWsChannel() {
 			processLeftUser(e, &response)
 
 		case "user_is_ready":
-			processReadyUser(e, &response)
+			processReadyUser(e)
 
 		case "choose_ai":
 			processChooseAI(e)
@@ -281,6 +441,7 @@ func ListenToWsChannel() {
 			mutex.Lock()
 			MaxPlayer = e.MaxPlayer
 			log.Println("e.MaxPlayer:", MaxPlayer)
+			sorted_players = []User{}
 			message := Message{
 				Timestamp:   e.Timestamp,
 				MessageId:   int64(len(messages)),
@@ -377,6 +538,67 @@ func ListenToWsChannel() {
 			}
 			broadcastToAll(response)
 			mutex.Unlock()
+		case "restart_game":
+			mutex.Lock()
+			isGameStarted = false
+			isGameOver = false
+			gameInfo = make([]Game, 0)
+			gameTurnsLeft = gameTurnNum * MaxPlayer
+			gameRound = 1
+			userSelections = make([]UserSelection, 0)
+			sorted_players = make([]User, 0)
+			messages = make([]Message, 0)
+			message := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        adminUser,
+				Message:     "게임이 초기화되었습니다.",
+				MessageType: "alert",
+			}
+			messages = []Message{message}
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "restart_game",
+				MessageType:    "alert",
+				Message:        "게임이 초기화되었습니다.",
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: messages,
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+			}
+			broadcastToAll(response)
+			mutex.Unlock()
+		case "restart_round":
+			mutex.Lock()
+			gameInfo[gameRound-1].NowUserIndex = 0
+			gameTurnsLeft = gameTurnNum * len(gameInfo[gameRound-1].PlayerList)
+			gameInfo[gameRound-1].TurnsLeft = gameTurnNum * len(gameInfo[gameRound-1].PlayerList)
+			userSelections = make([]UserSelection, 0)
+			message := Message{
+				Timestamp:   e.Timestamp,
+				MessageId:   int64(len(messages)),
+				User:        e.User,
+				Message:     fmt.Sprintf("%d라운드가 초기화되었습니다.", gameRound),
+				MessageType: "alert",
+			}
+			messages = []Message{message}
+			response = WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "restart_round",
+				MessageType:    "alert",
+				Message:        "라운드가 초기화되었습니다.",
+				MaxPlayer:      MaxPlayer,
+				User:           User{},
+				MessageLogList: messages,
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+			}
+
 		case "get_game_Info":
 			mutex.Lock()
 			response = WsJsonResponse{
@@ -447,8 +669,74 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 	broadcastToAll(*response)
 	mutex.Unlock()
 
+	log.Println("GPTReadyNum:", GPTReadyNum)
+	log.Println("len(getPlayerList()):", len(getPlayerList()))
+	log.Println("GPTEnterNum:", GPTEnterNum)
+
+	if GPTEnterNum <= len(getUserList()) && !GPTUser.IsOnline {
+		time.Sleep(time.Second * 1)
+		log.Println("GPTEnterNum:", GPTEnterNum)
+		log.Println("len(getUserList()):", len(getUserList()))
+		log.Println("GPTUser:", GPTUser)
+		mutex.Lock()
+		nicknameId, userName := getRandomUsername()
+		GPTUser = User{
+			UserId:     int64(len(clients)),
+			UserName:   userName,
+			NicknameId: nicknameId,
+			Role:       "player",
+			UUID:       "999",
+			IsOnline:   true,
+			PlayerType: "watcher",
+		}
+		players["999"] = GPTUser
+		// clients[WebSocketConnection{Conn: nil}] = GPTUser
+
+		GPTresponse := WsJsonResponse{
+			MaxPlayer:      MaxPlayer,
+			Timestamp:      e.Timestamp,
+			Action:         "human_info",
+			MessageType:    "system",
+			Message:        fmt.Sprintf("%s님이 입장했습니다.", GPTUser.UserName),
+			MessageLogList: messages,
+			User:           GPTUser,
+			OnlineUserList: getUserList(),
+			PlayerList:     getPlayerList(),
+			GameTurnsLeft:  gameTurnsLeft,
+			GameRound:      gameRound,
+		}
+		broadcastToAll(GPTresponse)
+		mutex.Unlock()
+	} else if GPTReadyNum >= len(getPlayerList()) && GPTUser.PlayerType == "watcher" {
+		log.Println("GPTReadyNum:", GPTReadyNum)
+		log.Println("len(getPlayerList()):", len(getPlayerList()))
+		log.Println("GPTUser:", GPTUser)
+
+		time.Sleep(time.Second * 1)
+		processReadyGPT()
+	}
+
 	if gameTurnsLeft == 0 {
-		processGameOver(e)
+		if isGameOver {
+			processGameOver(e.Timestamp)
+			mutex.Lock()
+			resultResponse := WsJsonResponse{
+				Timestamp:      e.Timestamp,
+				Action:         "game_over",
+				MessageType:    "alert",
+				Message:        "게임이 종료되었습니다.",
+				MaxPlayer:      MaxPlayer,
+				User:           adminUser,
+				MessageLogList: messages,
+				OnlineUserList: getUserList(),
+				PlayerList:     getPlayerList(),
+				GameTurnsLeft:  gameTurnsLeft,
+				GameRound:      gameRound,
+			}
+			broadcastToAll(resultResponse)
+			mutex.Unlock()
+			return
+		}
 		// messages = append(messages, waitMessage)
 		// in userSelection
 		if exists && nowUser.PlayerType == "player" {
@@ -494,9 +782,9 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 	}
 
 	if isGameStarted {
-		mutex.Lock()
 		nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
 		if nextUser.UUID == e.User.UUID {
+			mutex.Lock()
 			nowUser.PlayerType = "player"
 			someoneMessage := Message{
 				Timestamp:   e.Timestamp,
@@ -519,10 +807,13 @@ func processEnterHuman(e WsPayload, response *WsJsonResponse) {
 				GameTurnsLeft:  gameTurnsLeft,
 				GameRound:      gameRound,
 			}
-			nextConn := getUserClientByUUID(nextUser.UUID)
+			nextConn, _ := getUserClientByUUID(nextUser.UUID)
+			// if exists {
 			broadCastToSomeone(someoneResponse, nextConn)
+			mutex.Unlock()
+			// } else {
+			// 	mutex.Unlock()
 		}
-		mutex.Unlock()
 	}
 
 }
@@ -581,11 +872,15 @@ func processNewMessage(e WsPayload, response *WsJsonResponse) {
 	log.Println("gameTurnsLeft:", gameTurnsLeft)
 
 	if gameTurnsLeft == 0 {
-		processGameOver(e)
+		processGameOver(e.Timestamp)
 	}
 
-	mutex.Lock()
 	nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
+	if nextUser.UUID == GPTUser.UUID {
+		SendGPTMessage(e.Timestamp)
+		return
+	}
+	mutex.Lock()
 	someoneMessage := Message{
 		Timestamp:   e.Timestamp,
 		MessageId:   int64(len(messages)),
@@ -607,12 +902,20 @@ func processNewMessage(e WsPayload, response *WsJsonResponse) {
 		GameTurnsLeft:  gameTurnsLeft,
 		GameRound:      gameRound,
 	}
-	nextConn := getUserClientByUUID(nextUser.UUID)
+	nextConn, _ := getUserClientByUUID(nextUser.UUID)
+	// if exists {
+	// 	broadCastToSomeone(someoneResponse, nextConn)
+	// 	mutex.Unlock()
+	// } else {
+	// 	mutex.Unlock()
+
+	// }
 	broadCastToSomeone(someoneResponse, nextConn)
 	mutex.Unlock()
+
 }
 
-func processReadyUser(e WsPayload, response *WsJsonResponse) {
+func processReadyUser(e WsPayload) {
 	nowUser := players[e.User.UUID]
 	nowUser.PlayerType = "player"
 	log.Println(nowUser.NicknameId)
@@ -621,6 +924,7 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 	sorted_players = append(sorted_players, nowUser)
 
 	if MaxPlayer == len(getPlayerList()) {
+		sorted_players = randomSuffleUserList(sorted_players)
 		gameRound = 1
 		gameTurnsLeft = gameTurnNum * MaxPlayer
 		initGameInfo()
@@ -635,8 +939,9 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 		}
 		messages = []Message{message}
 
-		gameTurnsLeft := gameInfo[0].TurnsLeft
-		*response = WsJsonResponse{
+		gameInfo[0].TurnsLeft = gameTurnsLeft
+		gameInfo[0].PlayerList = sorted_players
+		response := WsJsonResponse{
 			Timestamp:      e.Timestamp,
 			Action:         "update_state",
 			MessageType:    "alert",
@@ -649,15 +954,16 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 			GameTurnsLeft:  gameTurnsLeft,
 			GameRound:      gameRound,
 		}
-		broadcastToAll(*response)
+		broadcastToAll(response)
 		mutex.Unlock()
+		isGameStarted = true
 
-		processNextTurn(e)
+		processNextTurn(e.Timestamp)
 		return
 	}
 
 	mutex.Lock()
-	*response = WsJsonResponse{
+	response := WsJsonResponse{
 		Timestamp:      e.Timestamp,
 		Action:         "human_info",
 		MessageType:    "system",
@@ -670,9 +976,83 @@ func processReadyUser(e WsPayload, response *WsJsonResponse) {
 		GameTurnsLeft:  gameTurnsLeft,
 		GameRound:      gameRound,
 	}
-	isGameStarted = true
-	broadcastToAll(*response)
+	broadcastToAll(response)
 	mutex.Unlock()
+
+	if GPTReadyNum >= len(getPlayerList()) && GPTUser.PlayerType == "watcher" {
+		log.Println("GPTReadyNum:", GPTReadyNum)
+		log.Println("len(getPlayerList()):", len(getPlayerList()))
+		log.Println("GPTUser:", GPTUser)
+
+		time.Sleep(time.Second * 1)
+		processReadyGPT()
+	}
+
+}
+
+func processReadyGPT() {
+	mutex.Lock()
+	GPTUser.PlayerType = "player"
+	nowUser := GPTUser
+
+	sorted_players = append(sorted_players, nowUser)
+
+	timestamp := getTimeStamp()
+
+	response := WsJsonResponse{
+		Timestamp:      timestamp,
+		Action:         "update_state",
+		MessageType:    "alert",
+		MaxPlayer:      MaxPlayer,
+		User:           nowUser,
+		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
+		MessageLogList: messages,
+		PlayerList:     getPlayerList(),
+		OnlineUserList: getUserList(),
+		GameTurnsLeft:  gameTurnsLeft,
+		GameRound:      gameRound,
+	}
+	broadcastToAll(response)
+	mutex.Unlock()
+
+	if MaxPlayer == len(getPlayerList()) {
+		sorted_players = randomSuffleUserList(sorted_players)
+		gameRound = 1
+		gameTurnsLeft = gameTurnNum * MaxPlayer
+		initGameInfo()
+
+		mutex.Lock()
+		message := Message{
+			Timestamp:   timestamp,
+			MessageId:   int64(len(messages)),
+			User:        adminUser,
+			Message:     "게임이 시작되었습니다.",
+			MessageType: "alert",
+		}
+		messages = []Message{message}
+
+		gameInfo[0].TurnsLeft = gameTurnsLeft
+		gameInfo[0].PlayerList = sorted_players
+		response := WsJsonResponse{
+			Timestamp:      timestamp,
+			Action:         "update_state",
+			MessageType:    "alert",
+			Message:        message.Message,
+			MaxPlayer:      MaxPlayer,
+			User:           GPTUser,
+			MessageLogList: messages,
+			PlayerList:     getPlayerList(),
+			OnlineUserList: getUserList(),
+			GameTurnsLeft:  gameTurnsLeft,
+			GameRound:      gameRound,
+		}
+		broadcastToAll(response)
+		mutex.Unlock()
+
+		processNextTurn(timestamp)
+		isGameStarted = true
+		return
+	}
 
 }
 
@@ -754,13 +1134,13 @@ func initGameInfo() {
 
 }
 
-func getUserClientByUUID(uuid string) WebSocketConnection {
+func getUserClientByUUID(uuid string) (WebSocketConnection, bool) {
 	for client := range clients {
 		if client.Conn != nil && clients[client].UUID == uuid {
-			return client
+			return client, true
 		}
 	}
-	return WebSocketConnection{}
+	return WebSocketConnection{}, false
 }
 
 func broadcastNewMessage(e WsPayload) {
@@ -792,9 +1172,10 @@ func broadcastNewMessage(e WsPayload) {
 	mutex.Unlock()
 }
 
-func processGameOver(e WsPayload) {
+func processGameOver(timestamp int64) {
+	// time.Sleep(time.Second * 5)
 	message := Message{
-		Timestamp:   e.Timestamp,
+		Timestamp:   timestamp,
 		MessageId:   int64(len(messages)),
 		User:        adminUser,
 		Message:     "게임이 종료되었습니다. 누가 AI였는지 확인해보세요.",
@@ -802,12 +1183,12 @@ func processGameOver(e WsPayload) {
 	}
 
 	response := WsJsonResponse{
-		Timestamp:      e.Timestamp,
+		Timestamp:      timestamp,
 		Action:         "choose_ai",
 		MessageType:    "alert",
 		Message:        message.Message,
 		MaxPlayer:      MaxPlayer,
-		User:           User{},
+		User:           adminUser,
 		MessageLogList: messages,
 		OnlineUserList: getUserList(),
 		PlayerList:     getPlayerList(),
@@ -816,8 +1197,9 @@ func processGameOver(e WsPayload) {
 	}
 	broadcastToAll(response)
 
-	gameInfo[gameRound-1].UserSelections = make([]UserSelection, 0)
+	// gameInfo[gameRound-1].UserSelections = make([]UserSelection, 0)
 	gameInfo[gameRound-1].Messages = messages
+
 }
 
 func findUserInUserSelection(userSelections []UserSelection, user User) (UserSelection, bool) {
@@ -869,16 +1251,21 @@ func processChooseAI(e WsPayload) {
 
 		gameRound++
 
-		if gameRound > gameRoundNum {
+		if gameRound >= gameRoundNum {
+			isGameOver = true
 			mutex.Lock()
+			alivePlayerString := ""
+			for _, v := range remainingPlayerList {
+				alivePlayerString += fmt.Sprintf("[%s] ", v.UserName)
+			}
 			finalMessage := Message{
 				Timestamp:   e.Timestamp,
 				MessageId:   int64(len(messages)),
 				User:        adminUser,
-				Message:     fmt.Sprintf("게임이 종료되었습니다. 최종 승자는 [%s]입니다.", sorted_players[0].UserName),
+				Message:     fmt.Sprintf("게임이 종료되었습니다. 최종 생존자는 %s입니다.", alivePlayerString),
 				MessageType: "alert",
 			}
-			// messages = []Message{resultMessage}
+			messages = []Message{finalMessage}
 			finalResponse := WsJsonResponse{
 				Timestamp:      e.Timestamp,
 				Action:         "game_over",
@@ -899,9 +1286,10 @@ func processChooseAI(e WsPayload) {
 
 		}
 
-		gameTurnsLeft = gameTurnNum * len(remainingPlayerList)
+		sorted_players = randomSuffleUserList(sorted_players)
+		gameTurnsLeft = gameTurnNum * len(sorted_players)
 		gameInfo[gameRound-1].TurnsLeft = gameTurnsLeft
-		gameInfo[gameRound-1].PlayerList = remainingPlayerList
+		gameInfo[gameRound-1].PlayerList = sorted_players
 		gameInfo[gameRound-1].NowUserIndex = 0
 		userSelections = make([]UserSelection, 0)
 
@@ -930,7 +1318,7 @@ func processChooseAI(e WsPayload) {
 		broadcastToAll(nextResponse)
 		mutex.Unlock()
 
-		processNextTurn(e)
+		processNextTurn(e.Timestamp)
 
 	}
 }
@@ -962,13 +1350,17 @@ func removePlayerListFromUserSelection(playerList []User) (vote int, eliminatedP
 	return votes[eliminatedPlayer.UserName], eliminatedPlayer, remainingPlayerList
 }
 
-func processNextTurn(e WsPayload) {
+func processNextTurn(timestamp int64) {
 
 	mutex.Lock()
 	nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
 	log.Println("nextUser:", nextUser)
+	// if nextUser.UUID == GPTUser.UUID {
+	// 	SendGPTMessage(timestamp)
+	// 	return
+	// }
 	someoneMessage := Message{
-		Timestamp:   e.Timestamp,
+		Timestamp:   timestamp,
 		MessageId:   int64(len(messages)),
 		User:        adminUser,
 		Message:     fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName),
@@ -976,7 +1368,7 @@ func processNextTurn(e WsPayload) {
 	}
 	// messages = append(messages, someoneMessage)
 	someoneResponse := WsJsonResponse{
-		Timestamp:   e.Timestamp,
+		Timestamp:   timestamp,
 		Action:      "your_turn",
 		MessageType: "alert",
 		Message:     someoneMessage.Message,
@@ -989,7 +1381,14 @@ func processNextTurn(e WsPayload) {
 		GameTurnsLeft:  gameTurnsLeft,
 		GameRound:      1,
 	}
-	nextConn := getUserClientByUUID(nextUser.UUID)
+	nextConn, _ := getUserClientByUUID(nextUser.UUID)
+	// if exists {
+	// 	broadCastToSomeone(someoneResponse, nextConn)
+	// 	mutex.Unlock()
+	// } else {
+	// 	mutex.Unlock()
+	// 	SendGPTMessage(timestamp)
+	// }
 	broadCastToSomeone(someoneResponse, nextConn)
 	mutex.Unlock()
 }
@@ -1001,4 +1400,99 @@ func makeMessagesFromGameInfo(gameInfo []Game) []Message {
 	}
 	return messages
 
+}
+
+func getTimeStamp() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+type MessageData struct {
+	UserUUID string `json:"user_UUID"`
+	Message  string `json:"message"`
+}
+
+func SendGPTMessage(timestamp int64) {
+	log.Println("=================================================")
+	log.Println("SendGPTMessage")
+
+	// var gptResponse WsJsonResponse
+	MessageLogString := ""
+	for _, v := range messages {
+		if v.User.UserName != "admin" {
+			MessageLogString += fmt.Sprintf("%s: %s\n", v.User.UserName, v.Message)
+		}
+	}
+	log.Println("MessageLogString:", MessageLogString)
+	gptResponse := sendGPTMessageToFastAPI(MessageLogString)
+	log.Println("gptResponse:", gptResponse)
+
+	gameInfo[gameRound-1].NowUserIndex = (gameInfo[gameRound-1].NowUserIndex + 1) % gameInfo[gameRound-1].MaxPlayer
+	gameTurnsLeft = Max(gameTurnsLeft-1, 0)
+	gameInfo[gameRound-1].TurnsLeft = gameTurnsLeft
+
+	mutex.Lock()
+
+	message := Message{
+		Timestamp:   timestamp,
+		MessageId:   int64(len(messages)),
+		User:        GPTUser,
+		Message:     gptResponse.Message,
+		MessageType: "message",
+	}
+	messages = append(messages, message)
+	chatResponse := WsJsonResponse{
+		Timestamp:      timestamp,
+		Action:         "new_message",
+		MessageType:    "message",
+		Message:        message.Message,
+		MaxPlayer:      MaxPlayer,
+		User:           GPTUser,
+		MessageLogList: messages,
+		OnlineUserList: getUserList(),
+		PlayerList:     getPlayerList(),
+		GameTurnsLeft:  gameTurnsLeft,
+		GameRound:      gameRound,
+	}
+	broadcastToAll(chatResponse)
+	mutex.Unlock()
+
+	if gameTurnsLeft == 0 {
+		processGameOver(timestamp)
+		return
+	}
+	processNextTurn(getTimeStamp())
+}
+
+func sendGPTMessageToFastAPI(message string) MessageData {
+	url := FastAPIURL + "/chatGPT"
+	msgData := MessageData{
+		UserUUID: GPTUser.UUID,
+		Message:  message,
+	}
+	// msgData := map[string]string{"message": message}
+	msgBytes, err := json.Marshal(msgData)
+	if err != nil {
+		log.Fatalf("Error occurred during marshaling. Error: %s", err.Error())
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(msgBytes))
+	if err != nil {
+		log.Fatalf("Error occurred during sending request to FastAPI. Error: %s", err.Error())
+	}
+	defer resp.Body.Close()
+
+	log.Printf("Message sent to FastAPI, received response status: %s", resp.Status)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Error occurred during reading response body. Error: %s", err.Error())
+	}
+	log.Printf("Response body: %s", string(body))
+
+	var gptResponse MessageData
+	err = json.Unmarshal(body, &gptResponse)
+	if err != nil {
+		log.Fatalf("Error occurred during unmarshaling. Error: %s", err.Error())
+	}
+	log.Printf("gptResponse: %s", gptResponse)
+	return gptResponse
 }

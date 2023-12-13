@@ -31,7 +31,7 @@ export default function Page() {
   const [isYourTurn] = useAtom(isYourTurnAtom);
 
   if (!isConnected) return <div>Connecting...</div>;
-  console.log(user);
+  // console.log(user);
   return (
     <main className="max-w-screen-md mx-auto bg-white shadow-lg py-4 md:py-8 px-4 md:px-8 min-h-screen">
       <div className="max-full min-h-max relative">

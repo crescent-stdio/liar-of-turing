@@ -43,7 +43,7 @@ export default function ClearMessageLogList({
         onClick={handleClearMessageLogList}
         className="px-2 py-1 text-sm font-medium text-white bg-gray-900 rounded-md hover:bg-[#3b82f6] focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75"
       >
-        Clear
+        Clear Message Log List
       </button>
     </>
   );

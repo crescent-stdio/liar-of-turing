@@ -1,20 +1,20 @@
 import { User } from "@/types/playerTypes";
 import OnlineUserList from "./OnlineUserList";
-import { playerListAtom, watcherListAtom } from "@/store/chatAtom";
+import { playerListAtom, userAtom, watcherListAtom } from "@/store/chatAtom";
 import { useAtomValue } from "jotai";
 import { maxPlayerAtom } from "@/store/gameAtom";
 import { useEffect, useState } from "react";
 import HorizontalLine from "./Line/HorizontalLine";
 type PlayAndWaitUserListProps = {
-  userData: User;
+  // userData: User;
 };
-export default function PlayAndWaitUserList({
-  userData,
-}: PlayAndWaitUserListProps) {
+export default function PlayAndWaitUserList({}: // userData,
+PlayAndWaitUserListProps) {
   const playerList = useAtomValue(playerListAtom);
   const watcherList = useAtomValue(watcherListAtom);
   const maxPlayer = useAtomValue(maxPlayerAtom);
   const [playerListTitle, setPlayerListTitle] = useState<string>("Players");
+  const userData = useAtomValue(userAtom);
 
   // const playerListTitle = `Players [${playerList.length}/${maxPlayer}]`;
   useEffect(() => {

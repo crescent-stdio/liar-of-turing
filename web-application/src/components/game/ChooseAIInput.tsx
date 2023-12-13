@@ -2,7 +2,7 @@ import { isFinishedSubmitionAtom } from "@/store/gameAtom";
 import { User } from "@/types/playerTypes";
 import { UserSelection, WsJsonRequest } from "@/types/wsTypes";
 import { useAtom } from "jotai";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type ChooseAIInputProps = {
   userList: User[];
@@ -17,6 +17,7 @@ export default function ChooseAIInput({
   const [AIUsername, setAIUsername] = useState<string>(userList[0].username);
   const [reason, setReason] = useState<string>("");
   const [, setIsSubmitted] = useAtom(isFinishedSubmitionAtom);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(true);
 
   const handleChooseAI = (event: React.FormEvent<HTMLFormElement>) => {
     console.log(AIUsername, reason);
@@ -39,57 +40,79 @@ export default function ChooseAIInput({
     sendMessage(jsonData);
     setIsSubmitted(true);
   };
-  // const handleChange;
+  // Toggle modal on click
+  const toggleModal = () => {
+    setIsModalOpen((prev) => !prev);
+  };
+  const handleModalClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+  };
+
+  // Set up global click listener
+  useEffect(() => {
+    window.addEventListener("click", toggleModal);
+    return () => {
+      window.removeEventListener("click", toggleModal);
+    };
+  }, []);
+
   return (
-    <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4">
-        <div className="bg-white shadow-xl rounded-lg w-full max-w-md mx-auto p-6">
-          <h3 className="font-bold text-lg mb-4 text-center">Choose AI user</h3>
-          <form className="flex flex-col space-y-4" onSubmit={handleChooseAI}>
-            <div className="flex flex-col">
-              <label htmlFor="ai" className="text-sm text-gray-600 mb-2">
-                I think the AI is...
-              </label>
-              <select
-                name="ai"
-                id="ai"
-                className="border border-gray-300 rounded-md p-2 focus:border-liar-blue focus:ring-liar-blue"
-                onChange={(e) => setAIUsername(e.target.value)}
-              >
-                {userList &&
-                  userList.length > 0 &&
-                  userList.map((user: User, index) => {
-                    return (
+    <div className="cursor-pointer flex justify-center items-center h-screen">
+      {isModalOpen && (
+        <div className="bg-black bg-opacity-50 fixed inset-0 p-4 flex justify-center items-center h-full">
+          <div
+            className="bg-white shadow-xl rounded-lg w-full max-w-md mx-auto p-6"
+            onClick={handleModalClick}
+          >
+            <h3 className="font-bold text-lg mb-4 text-center">
+              Choose AI user
+            </h3>
+            <form className="flex flex-col space-y-4" onSubmit={handleChooseAI}>
+              <div className="flex flex-col">
+                <label htmlFor="ai" className="text-sm text-gray-600 mb-2">
+                  I think the AI is...
+                </label>
+                <select
+                  name="ai"
+                  id="ai"
+                  className="border border-gray-300 rounded-md p-2 focus:border-liar-blue focus:ring-liar-blue"
+                  onChange={(e) => setAIUsername(e.target.value)}
+                >
+                  {userList &&
+                    userList.map((user, index) => (
                       <option key={index} value={user.username}>
                         {user.username}
                       </option>
-                    );
-                  })}
-              </select>
-            </div>
+                    ))}
+                </select>
+              </div>
 
-            <div className="flex flex-col">
-              <label htmlFor="reason" className="text-sm text-gray-600 mb-2">
-                Reason
-              </label>
-              <input
-                className="border border-gray-300 rounded-md p-2 focus:border-liar-blue focus:ring-liar-blue"
-                type="text"
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </div>
+              <div className="flex flex-col">
+                <label htmlFor="reason" className="text-sm text-gray-600 mb-2">
+                  Reason
+                </label>
+                <input
+                  className="border border-gray-300 rounded-md p-2 focus:border-liar-blue focus:ring-liar-blue"
+                  type="text"
+                  id="reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </div>
 
-            <button
-              type="submit"
-              className="bg-liar-blue hover:bg-liar-blue-dark text-white font-bold py-2 px-4 rounded"
-            >
-              Submit
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="bg-liar-blue hover:bg-liar-blue-dark text-white font-bold py-2 px-4 rounded"
+              >
+                Submit
+              </button>
+            </form>
+            <p className="text-sm text-gray-600 mt-4 text-center">
+              Click other place to close the modal
+            </p>
+          </div>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }
