@@ -46,7 +46,7 @@ export const roomInfoAtom = atomWithReset<Room[]>([
   },
 ]);
 
-export const userAtom = atomWithReset<User>({
+export const userAtom = atom<User>({
   uuid: "",
   user_id: 0,
   nickname_id: 0,
@@ -57,19 +57,16 @@ export const userAtom = atomWithReset<User>({
 });
 
 export const userListAtom = atom<User[]>([]);
-export const playerListAtom = atom<User[]>((get: any) => {
-  const userList = get(userListAtom);
-  const playerList = userList.filter((user: User) => {
-    return user.player_type === "player";
-  });
-  return playerList;
-});
+export const playerListAtom = atom<User[]>([]);
 
 export const watcherListAtom = atom<User[]>((get: any) => {
   const userList = get(userListAtom);
-  const watcherList = userList.filter((user: User) => {
-    return user.player_type === "watcher";
-  });
+  const playerList = get(playerListAtom);
+  const watcherList = userList.filter(
+    (user: User) =>
+      !playerList.some((player: User) => player.uuid === user.uuid)
+  );
+
   return watcherList;
 });
 

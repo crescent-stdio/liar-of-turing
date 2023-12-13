@@ -1,7 +1,7 @@
 import * as datetime from "date-fns";
 
 export const getDayFromTimestamp = (timestamp: number): string => {
-  return datetime.format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss");
+  return datetime.format(new Date(timestamp), "yyyy-MM-dd HH:mm");
 };
 export const getTimeFromTimer = (time: number): string => {
   //using date-fns ans 10:00

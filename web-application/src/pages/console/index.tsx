@@ -1,8 +1,11 @@
 import AdminMessageSender from "@/components/settings/AdminMessageSender";
+import ClearMessageLogList from "@/components/settings/ClearMessageLogList";
+import RestartGame from "@/components/settings/RestartGame";
+import RestartRound from "@/components/settings/RestartRound";
+import SetGameNums from "@/components/settings/SetGameNums";
 import SetMaxPayer from "@/components/settings/SetMaxPlayer";
 import useWebSocket from "@/hook/useWebSocket";
 import { adminUser } from "@/store/chatStore";
-import { getUserUUID } from "@/utils/liarHelper";
 
 export default function Console() {
   const {
@@ -24,6 +27,15 @@ export default function Console() {
         userList={fullUserList}
         sendMessage={handleWebSocketMessageSend}
       />
+      <ClearMessageLogList
+        messageLogList={messageLogList}
+        sendMessage={handleWebSocketMessageSend}
+      />
+      <SetGameNums sendMessage={handleWebSocketMessageSend} />
+
+      <br className="my-4" />
+      <RestartRound sendMessage={handleWebSocketMessageSend} />
+      <RestartGame sendMessage={handleWebSocketMessageSend} />
     </main>
   );
 }

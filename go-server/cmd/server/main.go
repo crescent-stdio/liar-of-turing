@@ -4,6 +4,7 @@ import (
 	"liarOfTuring/internal/handlers"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/joho/godotenv"
@@ -61,10 +62,14 @@ func main() {
 		MaxAge:           3000, // 5 min
 	})
 
+	FastAPIURL := os.Getenv("FASTAPI_URL")
+
 	mux := routes()
 	log.Println("Starting channel listener ")
 	go handlers.ListenToWsChannel()
+	go handlers.ListenToGPTWsChannel(FastAPIURL)
 
+	// bty env
 	server := http.Server{
 		Addr:    ":8443",
 		Handler: c.Handler(mux),
@@ -82,6 +87,7 @@ func main() {
 func routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", handlers.WsEndpoint)
+	mux.HandleFunc("/withGPT", handlers.WithGPTWsEndpoint)
 
 	return mux
 }

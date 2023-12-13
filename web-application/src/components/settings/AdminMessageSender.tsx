@@ -3,6 +3,7 @@ import { User } from "@/types/playerTypes";
 import { WsJsonRequest } from "@/types/wsTypes";
 import { useAtomValue } from "jotai";
 import { maxPlayerAtom } from "@/store/gameAtom";
+import { initialUserSelection } from "@/store/chatStore";
 
 type AdminMessageSenderProps = {
   userList: User[];
@@ -32,10 +33,13 @@ const AdminMessageSender: React.FC<AdminMessageSenderProps> = ({
       if (!testUserData) return;
       const jsonData: WsJsonRequest = {
         max_player: maxPlayer,
-        action: "new_message",
+        action: "new_message_admin",
         user: testUserData,
         timestamp: Date.now(),
         message: testMessage,
+        game_round: 0,
+        game_turns_left: 0,
+        user_selection: initialUserSelection,
       };
       sendMessage(jsonData);
       setTestMessage("");

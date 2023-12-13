@@ -1,3 +1,6 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -12,5 +15,6 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  font-family: "IBM Plex Sans", "IBMPlexSansKR-Regular", sans-serif;
+  font-family: "IBM Plex Sans", "IBMPlexSansKR-Regular", "Pretendard",
+    sans-serif;
 }
