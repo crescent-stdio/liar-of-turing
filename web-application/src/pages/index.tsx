@@ -48,7 +48,7 @@ export default function Page() {
         <div className="flex flex-col-reverse md:flex-row justify-between space-y-4 md:space-y-0 md:space-x-4 mt-4">
           <ChatTimeline messageLogList={messageLogList} userData={user} />
           {/* <VerticalLine /> */}
-          <PlayAndWaitUserList userData={user} />
+          <PlayAndWaitUserList />
         </div>
         <InputModal
           isGameStarted={isGameStarted}

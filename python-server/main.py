@@ -8,7 +8,7 @@ load_dotenv()
 client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 
-@app.post("/chatGPT")
+@app.post("/useGPT")
 def get_message_from_GPT(messageRequest: MessageData):
     print(messageRequest.message)
     chatlog = messageRequest.message

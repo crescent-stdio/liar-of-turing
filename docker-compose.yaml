@@ -28,6 +28,16 @@ services:
       - go-server-connection
     build: ./go-server
     restart: always
+  python-server:
+    container_name: python-server
+    expose:
+      - "5000"
+    env_file:
+      - ./python-server/.env
+    networks:
+      - go-server-connection
+    build: ./python-server
+    restart: always
   nginx:
     ports:
       - "80:80"

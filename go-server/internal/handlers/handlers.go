@@ -1464,7 +1464,7 @@ func SendGPTMessage(timestamp int64) {
 }
 
 func sendGPTMessageToFastAPI(message string) MessageData {
-	url := FastAPIURL + "/chatGPT"
+	url := FastAPIURL + "/useGPT"
 	msgData := MessageData{
 		UserUUID: GPTUser.UUID,
 		Message:  message,
