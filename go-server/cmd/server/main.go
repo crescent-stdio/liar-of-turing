@@ -1,7 +1,7 @@
 package main
 
 import (
-	"liarOfTuring/internal/handlers"
+	"liar-of-turing/internal/handlers"
 	"log"
 	"net/http"
 	"os"
@@ -66,8 +66,8 @@ func main() {
 
 	mux := routes()
 	log.Println("Starting channel listener ")
-	go handlers.ListenToWsChannel()
-	go handlers.ListenToGPTWsChannel(FastAPIURL)
+	go handlers.ListenToWebSocketChannel()
+	go handlers.ListenToGPTWebSocketChannel(FastAPIURL)
 
 	// bty env
 	server := http.Server{
@@ -86,8 +86,8 @@ func main() {
 
 func routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", handlers.WsEndpoint)
-	mux.HandleFunc("/withGPT", handlers.WithGPTWsEndpoint)
+	mux.HandleFunc("/ws", handlers.HandleWebSocketRequest)
+	mux.HandleFunc("/withGPT", handlers.HandleGPTWebSocketRequest)
 
 	return mux
 }

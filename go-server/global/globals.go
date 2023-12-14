@@ -1,7 +1,7 @@
 package global
 
 import (
-	"liarOfTuring/models"
+	"liar-of-turing/models"
 )
 
 type Global struct {

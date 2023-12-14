@@ -2,8 +2,8 @@ package utils
 
 import (
 	"encoding/json"
-	"liarOfTuring/global"
-	"liarOfTuring/models"
+	"liar-of-turing/global"
+	"liar-of-turing/models"
 	"os"
 )
 
