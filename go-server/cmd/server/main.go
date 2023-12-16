@@ -5,43 +5,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 )
-
-// Counter stores the value of the counter
-type Counter struct {
-	Value int `json:"value"`
-	mu    sync.Mutex
-}
-
-type Message struct {
-	UserName  string `json:"username"`
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Timestamp int64  `json:"timestamp"`
-}
-
-type User struct {
-	UserName string `json:"username"`
-	Role     string `json:"role"`
-}
-
-type Room struct {
-	RoomID string `json:"roomID"`
-	Users  []User `json:"users"`
-}
-
-type RoomList struct {
-	Rooms []Room `json:"rooms"`
-}
-
-type RoomInfo struct {
-	RoomID string `json:"roomID"`
-	Users  []User `json:"users"`
-}
 
 // main is the main function
 func main() {
