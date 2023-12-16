@@ -134,6 +134,8 @@ And you have to set the environment variables.
 NEXT_PUBLIC_WEBSOCKET_URL="ws://127.0.0.1:8443/ws"
 ```
 
+<br>
+
 ## 🥬 Team 묵은지참말쟁이(Seasoned Scholars of Truthsayers)
 
 > [!NOTE]
