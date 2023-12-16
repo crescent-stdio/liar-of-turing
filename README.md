@@ -2,7 +2,7 @@
 
 ![Liar of Turing](./.github/images/liar-of-turing.png)
 <p align="center">
-  <img src="./.github/images/demo.png" alt="demo of liar of turing" width="40%" height="40%">
+  <img src="./.github/images/demo.png" alt="demo of liar of turing" width="60%" height="60%">
 </p>
 
 ## Overview
