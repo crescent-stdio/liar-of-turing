@@ -1491,8 +1491,8 @@ func getTimeStamp() int64 {
 }
 
 type MessageData struct {
-	UserUUID string `json:"user_UUID"`
-	Message  string `json:"message"`
+	GptName string `json:"gptName"`
+	Message string `json:"message"`
 }
 
 func SendGPTMessage(timestamp int64) {
@@ -1552,8 +1552,8 @@ func SendGPTMessage(timestamp int64) {
 func sendGPTMessageToFastAPI(message string) MessageData {
 	url := FastAPIURL + "/useGPT"
 	msgData := MessageData{
-		UserUUID: GPTUser.UUID,
-		Message:  message,
+		GptName: GPTUser.UserName,
+		Message: message,
 	}
 	// msgData := map[string]string{"message": message}
 	msgBytes, err := json.Marshal(msgData)
