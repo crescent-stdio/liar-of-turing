@@ -1,5 +1,8 @@
 # Liar of Turing: A Multiplayer Chat Application with AI Integration
 
+![Liar of Turing](./.github/images/liar-of-turing.png)
+![demo](./.github/images/demo.png){: width="70%" height="70%"}
+
 ## Overview
 
 > [!NOTE]
@@ -48,7 +51,7 @@ Amidst this societal backdrop, our project draws inspiration from the Turing Tes
 
 ## Project Infrastructure and Architecture Overview
 
-![Pipeline of the System](./.github/images/project-infrastructure.png)
+![Pipeline of the System](./.github/images/project-infrastructure.png){: width="80%" height="80%"}
 
 ### A. Server and Infrastructure Structure
 
