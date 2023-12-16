@@ -1,14 +1,18 @@
 package models
 
-import "github.com/gorilla/websocket"
+import (
+	"liar-of-turing/common"
+
+	"github.com/gorilla/websocket"
+)
 
 // WebSocketConnection represents a WebSocket connection.
 type WebSocketConnection struct {
 	*websocket.Conn
 }
 
-// CloseWebSocketConnection closes the WebSocket connection.
-func (conn *WebSocketConnection) CloseWebSocketConnection() {
+// CloseWebSocket closes the WebSocket connection.
+func (conn *WebSocketConnection) CloseWebSocket() {
 	if conn != nil && conn.Conn != nil {
 		conn.Close()
 	}
@@ -19,7 +23,7 @@ type WsPayload struct {
 	Action string `json:"action"`
 	// RoomId    int64               `json:"room_id"`
 	MaxPlayer     int                 `json:"max_player"`
-	User          User                `json:"user"`
+	User          common.User         `json:"user"`
 	Timestamp     int64               `json:"timestamp"`
 	Message       string              `json:"message"`
 	GameTurnsLeft int                 `json:"game_turns_left"`
@@ -35,12 +39,12 @@ type WsJsonResponse struct {
 	Timestamp      int64           `json:"timestamp"`
 	MaxPlayer      int             `json:"max_player"`
 	Action         string          `json:"action"`
-	User           User            `json:"user"`
+	User           common.User     `json:"user"`
 	Message        string          `json:"message"`
 	MessageType    string          `json:"message_type"`
 	MessageLogList []Message       `json:"message_log_list"`
-	OnlineUserList []User          `json:"online_user_list"`
-	PlayerList     []User          `json:"player_list"`
+	OnlineUserList []common.User   `json:"online_user_list"`
+	PlayerList     []common.User   `json:"player_list"`
 	GameTurnsLeft  int             `json:"game_turns_left"`
 	GameRound      int             `json:"game_round"`
 	GameTurnNum    int             `json:"game_turn_num"`

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"fmt"
+	"liar-of-turing/models"
+	"liar-of-turing/services"
 	"liar-of-turing/utils"
 	"log"
 	"net/http"
@@ -10,41 +12,28 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// GetWebSocketClientByUUID returns the WebSocket client with the given UUID.
-func GetWebSocketClientByUUID(uuid string) (WebSocketConnection, bool) {
-	for client := range clients {
-		if client.Conn != nil && clients[client].UUID == uuid {
-			return client, true
-		}
-	}
-	return WebSocketConnection{}, false
-}
-
-func HandleWebSocketRequest(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgradeConnection.Upgrade(w, r, nil)
+func HandleWebSocketRequest(w http.ResponseWriter, r *http.Request, userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	ws, err := webSocketService.UpgradeConfig.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Error upgrading to WebSocket:", err)
 		return
 	}
 
-	conn := WebSocketConnection{Conn: ws}
+	conn := models.WebSocketConnection{Conn: ws}
 	log.Println("Client connected to endpoint")
 
-	go ListenWebSocketConnections(&conn)
+	go ListenWebSocketConnections(webSocketService, &conn)
 }
 
-func ListenWebSocketConnections(conn *WebSocketConnection) {
+func ListenWebSocketConnections(webSocketService *services.WebSocketService, conn *models.WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("Recovered in ListenForWs:", r)
+			log.Println("Recovered in ListenWebSocketConnections:", r)
 		}
-		conn.CloseWebSocketConnection() // Safely close the connection
-		mutex.Lock()
-		delete(clients, *conn) // Remove the client from the map
-		mutex.Unlock()
+		webSocketService.RemoveClient(*conn) // Safely close the connection
 	}()
 
-	var payload WsPayload
+	var payload models.WsPayload
 
 	for {
 		err := conn.ReadJSON(&payload)
@@ -59,712 +48,387 @@ func ListenWebSocketConnections(conn *WebSocketConnection) {
 		}
 
 		payload.Conn = *conn
-		Broadcast <- payload
+		webSocketService.Broadcast <- payload
 	}
 }
 
-func ListenToWebSocketChannel() {
-	var response WsJsonResponse
+func ListenToWebSocketChannel(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	clients := webSocketService.GetClients()
+	adminUser := userManager.GetAdminUser()
+	GPTUsers := userManager.GetGPTUsers()
+
 	for {
-		e := <-Broadcast
+		e := <-webSocketService.Broadcast
 
 		// Consolidated logging
 		log.Printf("Action: %s, User: %v\n", e.Action, e.User)
 
-		// MaxPlayer = e.MaxPlayer
-		log.Println("MaxPlayer:", MaxPlayer)
-		log.Println("messages:", messages)
-		log.Println("userSelections:", userSelections)
 		switch e.Action {
-		case "broadcast", "new_message_admin":
-			mutex.Lock()
-			message := Message{
-				Timestamp:   e.Timestamp,
-				MessageId:   int64(len(messages)),
-				User:        e.User,
-				Message:     e.Message,
-				MessageType: "message",
-			}
-			messages = append(messages, message)
+		case "broadcast", "new_message_admin", "new_message":
+			BroadcastWebSocketMessage(userManager, webSocketService, gameState, e)
 
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         e.Action,
-				User:           e.User,
-				Message:        e.Message,
-				MessageLogList: messages,
-				MessageType:    "message",
-				MaxPlayer:      MaxPlayer,
-
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
-			broadcastToAll(clients, response)
-			mutex.Unlock()
-
-		case "list_users":
-			mutex.Lock()
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "update_status",
-				MessageType:    "info",
-				MessageLogList: messages,
-				MaxPlayer:      MaxPlayer,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
-			broadcastToAll(clients, response)
-			mutex.Unlock()
-		case "new_message":
-			HandleNewWebSocketMessage(e, &response)
-			// broadcastToAll(clients, response)
+		// case "new_message":
+		// 	HandleNewWebSocketMessage(userManager, webSocketService, gameState, e)
 		case "enter_human":
-			processEnterHuman(e)
+			HandleHumanUserEntry(userManager, webSocketService, gameState, e)
 			// broadcastToAll(clients, response)
-
 		case "left_user":
-			processLeftUser(e, &response)
+			HandleUserLeave(userManager, webSocketService, gameState, e)
 
 		case "user_is_ready":
-			processReadyUser(e)
+			HandleUserReady(userManager, webSocketService, gameState, e)
 
 		case "choose_ai":
-			processChooseAI(e)
+			HandleAISelection(gameState, e)
 
 		case "set_max_player":
-			mutex.Lock()
-			MaxPlayer = e.MaxPlayer
-			// randomChooseReadyUserAndEnterUser
-			GPTEnterNum, GPTReadyNum = SelectRandomReadyAndEnteringUser(MaxPlayer)
-			log.Println("e.MaxPlayer:", MaxPlayer)
-			sorted_players = []User{}
-			players = SetAllUserToWatcher(players)
-			GPTUser.PlayerType = "watcher"
+			gameState.SetMaxPlayer(e.MaxPlayer)
+			userManager.SetAllUsersAsWatchers()
+			for _, gpt := range GPTUsers {
+				gpt.PlayerType = "watcher"
+			}
+			userManager.SetGPTUsers(GPTUsers)
 
-			message := Message{
-				Timestamp:   e.Timestamp,
-				MessageId:   int64(len(messages)),
-				User:        e.User,
-				Message:     fmt.Sprintf("최대 인원이 %d명으로 설정되었습니다.", MaxPlayer),
-				MessageType: "info", // "alert",
-			}
-			messages = append(messages, message)
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "update_state",
-				MessageType:    "info",
-				Message:        message.Message,
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: messages,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
+			message := utils.CreateMessageFromUser(userManager, e.User, e.Timestamp)
+			message.Message = fmt.Sprintf("최대 인원이 %d명으로 설정되었습니다.", e.MaxPlayer)
+			message.MessageType = "info"
+
+			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+			response.Action = "update_state"
+			response.Message = message.Message
+			response.MessageType = "info"
+
 			broadcastToAll(clients, response)
-			mutex.Unlock()
+
+			userManager.AddPrevMessagesFromMessages()
+			userManager.ClearMessages()
+			userManager.AddMessage(message)
+
 		case "set_game_round":
-			mutex.Lock()
-			gameRoundNum = e.GameRound
-			log.Println("e.GameRound:", gameRoundNum)
-			message := Message{
-				Timestamp:   e.Timestamp,
-				MessageId:   int64(len(messages)),
-				User:        e.User,
-				Message:     fmt.Sprintf("라운드 수가 %d개로 설정되었습니다.", gameRoundNum),
-				MessageType: "info", // "alert",
-			}
-			messages = append(messages, message)
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "update_state",
-				MessageType:    "info",
-				Message:        message.Message,
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: messages,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
+			gameState.SetGameRoundNum(e.GameRoundNum)
+			userManager.AddPrevMessagesFromMessages()
+			userManager.ClearMessages()
+
+			message := utils.CreateMessageFromUser(userManager, e.User, e.Timestamp)
+			message.Message = fmt.Sprintf("라운드 수가 %d개로 설정되었습니다.", e.GameRoundNum)
+			message.MessageType = "info"
+
+			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+			response.Action = "update_state"
+			response.Message = message.Message
+			response.MessageType = "info"
+			response.User = adminUser
+
 			broadcastToAll(clients, response)
-			mutex.Unlock()
+
 		case "set_game_turn":
-			mutex.Lock()
-			gameTurnNum = e.GameTurnNum
-			log.Println("e.GameTurn:", gameTurnNum)
-			message := Message{
-				Timestamp:   e.Timestamp,
-				MessageId:   int64(len(messages)),
-				User:        e.User,
-				Message:     fmt.Sprintf("턴 수가 %d개로 설정되었습니다.", gameTurnNum),
-				MessageType: "info", // "alert",
-			}
-			messages = append(messages, message)
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "update_state",
-				MessageType:    "info",
-				Message:        message.Message,
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: messages,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
-			broadcastToAll(clients, response)
-			mutex.Unlock()
+			gameState.SetGameTurnNum(e.GameTurnNum)
+			message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+			message.Message = fmt.Sprintf("턴 수가 %d개로 설정되었습니다.", e.GameTurnNum)
+			message.MessageType = "info"
 
+			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+			response.Action = "update_state"
+			response.Message = message.Message
+			response.MessageType = "info"
+			response.User = adminUser
+
+			broadcastToAll(clients, response)
+
+			userManager.AddMessage(message)
 		case "clear_messages":
-			mutex.Lock()
-			prevMessages = messages
-			messages = []Message{}
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "update_state",
-				MessageType:    "info",
-				Message:        "메시지가 초기화되었습니다.",
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: messages,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
-			broadcastToAll(clients, response)
-			mutex.Unlock()
-		case "restart_game":
-			mutex.Lock()
-			isGameStarted = false
-			isGameOver = false
-			gameInfo = make([]Game, 0)
-			gameTurnsLeft = gameTurnNum * MaxPlayer
-			gameRound = 1
-			userSelections = make([]UserSelection, 0)
-			sorted_players = []User{}
-			players = SetAllUserToWatcher(players)
-			GPTUser.PlayerType = "watcher"
-			message := Message{
-				Timestamp:   e.Timestamp,
-				MessageId:   int64(len(messages)),
-				User:        adminUser,
-				Message:     "게임이 초기화되었습니다.",
-				MessageType: "alert",
-			}
-			prevMessages = messages
-			messages = []Message{message}
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "restart_game",
-				MessageType:    "alert",
-				Message:        "게임이 초기화되었습니다.",
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: messages,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
-			broadcastToAll(clients, response)
-			mutex.Unlock()
-		case "restart_round":
-			mutex.Lock()
-			gameInfo[gameRound-1].NowUserIndex = 0
-			gameTurnsLeft = gameTurnNum * len(gameInfo[gameRound-1].PlayerList)
-			gameInfo[gameRound-1].TurnsLeft = gameTurnNum * len(gameInfo[gameRound-1].PlayerList)
-			userSelections = make([]UserSelection, 0)
-			message := Message{
-				Timestamp:   e.Timestamp,
-				MessageId:   int64(len(messages)),
-				User:        e.User,
-				Message:     fmt.Sprintf("%d라운드가 초기화되었습니다.", gameRound),
-				MessageType: "alert",
-			}
-			prevMessages = messages
-			messages = []Message{message}
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "restart_round",
-				MessageType:    "alert",
-				Message:        "라운드가 초기화되었습니다.",
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: messages,
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-			}
+			userManager.AddPrevMessagesFromMessages()
+			userManager.ClearMessages()
 
+			// Broadcast to all
+			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+			response.Action = "update_state"
+			response.Message = "메시지가 초기화되었습니다."
+			response.MessageType = "info"
+			response.User = adminUser
+
+			broadcastToAll(clients, response)
+
+		case "restart_game":
+			HandleRestartGameEvent(userManager, webSocketService, gameState, e)
+
+		case "restart_round":
+			gameRound := gameState.GetNowGameInfo().Round
+			gameState.SetIfResetRound(userManager)
+			message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+			message.Message = fmt.Sprintf("%d라운드가 초기화되었습니다.", gameRound)
+			message.MessageType = "alert"
+
+			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+			response.Action = "restart_round"
+			response.Message = message.Message
+			response.MessageType = "alert"
+			response.User = adminUser
+
+			broadcastToAll(clients, response)
+			userManager.AddPrevMessagesFromMessages()
+			userManager.ClearMessages()
+			userManager.AddMessage(message)
 		case "get_game_Info":
-			mutex.Lock()
-			response = WsJsonResponse{
-				Timestamp:      e.Timestamp,
-				Action:         "get_game_Info",
-				MessageType:    "info",
-				Message:        "게임 정보를 가져왔습니다.",
-				MaxPlayer:      MaxPlayer,
-				User:           User{},
-				MessageLogList: makeMessagesFromGameInfo(gameInfo),
-				OnlineUserList: getUserList(),
-				PlayerList:     getPlayerList(),
-				GameTurnsLeft:  gameTurnsLeft,
-				GameRound:      gameRound,
-				IsGameStarted:  isGameStarted,
-				IsGameOver:     isGameOver,
-				UserSelection:  userSelections,
-			}
+			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+			response.Action = "get_game_Info"
+			response.Message = "게임 정보를 가져왔습니다."
+			gameInfo := gameState.GetAllGameInfo()
+			response.MessageLogList = CreateMessagesFromGameStatus(gameInfo)
+			response.MessageType = "info"
+			response.User = adminUser
 			broadCastToSomeone(clients, e.Conn, response)
-			mutex.Unlock()
 
 		default:
 			log.Printf("Unknown action: %s\n", e.Action)
 		}
-		// log.Println("users:", getUserList())
-		// if response.Action != "" {
-		// 	broadcastToAll(clients, response)
-		// }
+		ProcessGPTEntering(userManager, webSocketService, gameState)
+		ProcessGPTReady(userManager, webSocketService, gameState)
+		ProcessAllPlayersReady(userManager, webSocketService, gameState)
+		ProcessNextTurn(userManager, webSocketService, gameState, e.Timestamp)
+		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
+		// next game or next round
+		HandleRoundIsOver(userManager, webSocketService, gameState, e)
 	}
 }
 
-func HandleNewWebSocketMessage(e WsPayload, response *WsJsonResponse) {
-	log.Println("processNewMessage")
-	// log.Println("message", e.Message)
-	BroadcastMessageToWebSockets(e)
+// HandleUserReady: If user is ready, then set user to "PLAYER"
+func HandleUserReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, e models.WsPayload) {
+	clients := webSocketService.GetClients()
+	adminUser := userManager.GetAdminUser()
 
-	// GameRound := e.GameRound
-	gameInfo[gameRound-1].NowUserIndex = (gameInfo[gameRound-1].NowUserIndex + 1) % gameInfo[gameRound-1].MaxPlayer
-	gameTurnsLeft = utils.Max(gameTurnsLeft-1, 0)
-	gameInfo[gameRound-1].TurnsLeft = gameTurnsLeft
-
-	log.Println("gameRound:", gameRound)
-	log.Println("gameTurnsLeft:", gameTurnsLeft)
-
-	if gameTurnsLeft == 0 {
-		processGameOver(e.Timestamp)
-	}
-
-	nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
-	if nextUser.UUID == GPTUser.UUID {
-		SendGPTMessage(e.Timestamp)
+	// Set user's type to "PLAYER"
+	nowUser, exists := userManager.GetPlayerByUUID(e.User.UUID)
+	if !exists {
+		log.Println("User is not a player")
 		return
 	}
-	mutex.Lock()
-	someoneMessage := Message{
-		Timestamp:   e.Timestamp,
-		MessageId:   int64(len(messages)),
-		User:        adminUser,
-		Message:     fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName),
-		MessageType: "alert",
-	}
-	// messages = append(messages, someoneMessage)
-	someoneResponse := WsJsonResponse{
-		Timestamp:      e.Timestamp,
-		Action:         "your_turn",
-		MessageType:    "alert",
-		Message:        someoneMessage.Message,
-		MaxPlayer:      MaxPlayer,
-		User:           adminUser, // nextUser,
-		MessageLogList: messages,
-		PlayerList:     getPlayerList(),
-		OnlineUserList: getUserList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
-	nextConn, _ := GetWebSocketClientByUUID(nextUser.UUID)
-	// if exists {
-	// 	broadCastToSomeone(someoneResponse, nextConn)
-	// 	mutex.Unlock()
-	// } else {
-	// 	mutex.Unlock()
-
-	// }
-	broadCastToSomeone(clients, nextConn, someoneResponse)
-	mutex.Unlock()
-
-}
-
-func processReadyUser(e WsPayload) {
-	nowUser := players[e.User.UUID]
 	nowUser.PlayerType = "player"
-	log.Println(nowUser.NicknameId)
-	players[e.User.UUID] = nowUser
-	clients[e.Conn] = nowUser
-	sorted_players = append(sorted_players, nowUser)
+	userManager.AddPlayerByUser(nowUser)
+	userManager.AddSortedPlayer(nowUser)
+	webSocketService.AddClient(e.Conn, nowUser)
 
-	if MaxPlayer == len(getPlayerList()) {
-		sorted_players = ShuffleUsersRandomly(sorted_players)
-		gameRound = 1
-		gameTurnsLeft = gameTurnNum * MaxPlayer
-		initGameInfo()
-
-		mutex.Lock()
-		message := Message{
-			Timestamp:   e.Timestamp,
-			MessageId:   int64(len(messages)),
-			User:        adminUser,
-			Message:     "게임이 시작되었습니다.",
-			MessageType: "alert",
-		}
-		messages = []Message{message}
-
-		gameInfo[0].TurnsLeft = gameTurnsLeft
-		gameInfo[0].PlayerList = sorted_players
-		response := WsJsonResponse{
-			Timestamp:      e.Timestamp,
-			Action:         "update_state",
-			MessageType:    "alert",
-			Message:        message.Message,
-			MaxPlayer:      MaxPlayer,
-			User:           User{},
-			MessageLogList: messages,
-			PlayerList:     getPlayerList(),
-			OnlineUserList: getUserList(),
-			GameTurnsLeft:  gameTurnsLeft,
-			GameRound:      gameRound,
-			IsGameStarted:  isGameStarted,
-			IsGameOver:     isGameOver,
-		}
-		broadcastToAll(clients, response)
-		mutex.Unlock()
-		isGameStarted = true
-
-		processNextTurn(e.Timestamp)
-		return
-	}
-
-	mutex.Lock()
-	response := WsJsonResponse{
-		Timestamp:      e.Timestamp,
-		Action:         "human_info",
-		MessageType:    "system",
-		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
-		User:           nowUser,
-		OnlineUserList: getUserList(),
-		MessageLogList: messages,
-		MaxPlayer:      MaxPlayer,
-		PlayerList:     getPlayerList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
+	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+	message.MessageType = "info"
+	message.Message = fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName)
+	userManager.AddMessage(message)
+	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+	response.Action = "human_info"
+	response.MessageType = "system"
+	response.Message = message.Message
 	broadcastToAll(clients, response)
-	mutex.Unlock()
-
-	if GPTReadyNum >= len(getPlayerList()) && GPTUser.PlayerType == "watcher" {
-		log.Println("GPTReadyNum:", GPTReadyNum)
-		log.Println("len(getPlayerList()):", len(getPlayerList()))
-		log.Println("GPTUser:", GPTUser)
-
-		time.Sleep(time.Second * 1)
-		processReadyGPT()
-	}
 
 }
 
-func processReadyGPT() {
-	mutex.Lock()
+func BroadcastWebSocketMessage(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, e models.WsPayload) {
+	clients := webSocketService.GetClients()
+	message := utils.CreateMessageFromUser(userManager, e.User, e.Timestamp)
+	userManager.AddMessage(message)
+	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+	broadcastToAll(clients, response)
+}
+
+func ProcessAllPlayersReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	if !gameState.CheckAllUserReady(userManager) {
+		return
+	}
+	userManager.SetRandomlyShuffledPlayers(webSocketService, gameState)
+	gameState.InitializeRoundInfo(userManager, webSocketService)
+
+	clients := webSocketService.GetClients()
+	adminUser := userManager.GetAdminUser()
+
+	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.MessageType = "alert"
+	message.Message = "게임이 시작되었습니다."
+
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.MessageType = "alert"
+	response.Message = message.Message
+	broadcastToAll(clients, response)
+
+	userManager.AddPrevMessagesFromMessages()
+	userManager.ClearMessages()
+	userManager.AddMessage(message)
+
+	// HandleRoundIsOver(e.Timestamp)
+}
+
+func ProcessGPTEntering(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	OnlineUserNum := len(utils.RetrieveUserList(userManager))
+
+	GPTUsers := userManager.GetGPTUsers()
+	GPTEntryNums := gameState.GetGPTEntryNums()
+	for idx, GPTEntryNum := range GPTEntryNums {
+		GPTUser := GPTUsers[idx]
+		// If GPT's Entring time cames...(GPTUser isn't ONLINE)
+		if !GPTUser.IsOnline && GPTEntryNum >= OnlineUserNum {
+			time.Sleep(time.Second * 1)
+			HandelGPTEntry(userManager, webSocketService, gameState, idx)
+			time.Sleep(time.Second * 1)
+		}
+	}
+}
+
+func HandelGPTEntry(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, index int) {
+	clients := webSocketService.GetClients()
+	adminUser := userManager.GetAdminUser()
+	GPTUser := userManager.GetGPTUsers()[index]
+
+	// set GPTUser to true
+	GPTUser.IsOnline = true
+	userManager.SetGPTUser(index, GPTUser)
+	userManager.AddPlayerByUser(GPTUser)
+
+	// Make Message & Response
+	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.MessageType = "info"
+	message.Message = fmt.Sprintf("%s님이 채팅방에 입장했습니다.", GPTUser.UserName)
+	userManager.AddMessage(message)
+
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.Action = "human_info"
+	response.MessageType = "system"
+	response.Message = message.Message
+
+	broadcastToAll(clients, response)
+}
+func ProcessGPTReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	ReadyPlayerNum := len(utils.RetrievePlayerList(userManager))
+
+	GPTUsers := userManager.GetGPTUsers()
+	GPTReadyNums := gameState.GetGPTReadyNums()
+	for idx, GPTReadyNum := range GPTReadyNums {
+		GPTUser := GPTUsers[idx]
+		// If GPT's Ready time cames...(GPTUser isn't WATCHER)
+		if GPTUser.PlayerType == "watcher" && GPTReadyNum >= ReadyPlayerNum {
+			time.Sleep(time.Second * 1)
+			HandleGPTReady(userManager, webSocketService, gameState, idx)
+			time.Sleep(time.Second * 1)
+		}
+	}
+}
+
+// HandleGPTReady: If GPT is ready, then set user to "PLAYER"
+func HandleGPTReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, index int) {
+	clients := webSocketService.GetClients()
+	adminUser := userManager.GetAdminUser()
+	GPTUser := userManager.GetGPTUsers()[index]
+
+	// Set GPT's type to "PLAYER"
 	GPTUser.PlayerType = "player"
-	nowUser := GPTUser
+	userManager.AddPlayerByUser(GPTUser)
+	userManager.AddSortedPlayer(GPTUser)
+	userManager.SetGPTUser(index, GPTUser)
 
-	sorted_players = append(sorted_players, nowUser)
+	// Make Message & Response
+	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.MessageType = "info"
+	message.Message = fmt.Sprintf("%s님이 게임에 참여했습니다.", GPTUser.UserName)
+	userManager.AddMessage(message)
 
-	timestamp := utils.GetCurrentTimestamp()
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.Action = "human_info"
+	response.MessageType = "system"
+	response.Message = message.Message
 
-	response := WsJsonResponse{
-		Timestamp:      timestamp,
-		Action:         "update_state",
-		MessageType:    "alert",
-		MaxPlayer:      MaxPlayer,
-		User:           nowUser,
-		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
-		MessageLogList: messages,
-		PlayerList:     getPlayerList(),
-		OnlineUserList: getUserList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
 	broadcastToAll(clients, response)
-	mutex.Unlock()
-
-	if MaxPlayer == len(getPlayerList()) {
-		sorted_players = ShuffleUsersRandomly(sorted_players)
-		gameRound = 1
-		gameTurnsLeft = gameTurnNum * MaxPlayer
-		initGameInfo()
-
-		mutex.Lock()
-		message := Message{
-			Timestamp:   timestamp,
-			MessageId:   int64(len(messages)),
-			User:        adminUser,
-			Message:     "게임이 시작되었습니다.",
-			MessageType: "alert",
-		}
-		messages = []Message{message}
-
-		gameInfo[0].TurnsLeft = gameTurnsLeft
-		gameInfo[0].PlayerList = sorted_players
-		response := WsJsonResponse{
-			Timestamp:      timestamp,
-			Action:         "update_state",
-			MessageType:    "alert",
-			Message:        message.Message,
-			MaxPlayer:      MaxPlayer,
-			User:           GPTUser,
-			MessageLogList: messages,
-			PlayerList:     getPlayerList(),
-			OnlineUserList: getUserList(),
-			GameTurnsLeft:  gameTurnsLeft,
-			GameRound:      gameRound,
-			IsGameStarted:  isGameStarted,
-			IsGameOver:     isGameOver,
-		}
-		broadcastToAll(clients, response)
-		mutex.Unlock()
-
-		processNextTurn(timestamp)
-		isGameStarted = true
-		return
-	}
-
 }
 
-func HandleNewWebSocketMessage(e WsPayload, response *WsJsonResponse) {
-	log.Println("processNewMessage")
-	// log.Println("message", e.Message)
-	BroadcastMessageToWebSockets(e)
+func ProcessAllPlayersVoted(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	clients := webSocketService.GetClients()
+	gameInfo := gameState.GetNowGameInfo()
+	gameRound := gameInfo.Round
+	userSelections := gameState.GetNowUserSelections()
+	AdmminUser := userManager.GetAdminUser()
+	GPTUsers := userManager.GetGPTUsers()
 
-	// GameRound := e.GameRound
-	gameInfo[gameRound-1].NowUserIndex = (gameInfo[gameRound-1].NowUserIndex + 1) % gameInfo[gameRound-1].MaxPlayer
-	gameTurnsLeft = utils.Max(gameTurnsLeft-1, 0)
-	gameInfo[gameRound-1].TurnsLeft = gameTurnsLeft
+	if len(userSelections) == gameInfo.MaxPlayer-len(GPTUsers) {
+		gameState.SetIfRoundIsOver()
+		voteNum, eliminatedPlayer, remainingPlayerList := userManager.ExcludePlayersFromSelections(webSocketService, gameState)
 
-	log.Println("gameRound:", gameRound)
-	log.Println("gameTurnsLeft:", gameTurnsLeft)
+		userManager.SetSortedPlayers(remainingPlayerList)
 
-	if gameTurnsLeft == 0 {
-		processGameOver(e.Timestamp)
+		messages := utils.CreateMessageWithAutoTimestamp(userManager, AdmminUser)
+		messages.MessageType = "alert"
+		messages.Message = fmt.Sprintf("%d라운드가 종료되었습니다. 탈락자는 %d표를 받은 [%s]입니다.", gameRound, voteNum, eliminatedPlayer.UserName)
+
+		response := utils.CreateInitalizeResponse(userManager, gameState)
+		response.Action = ""
+		response.MessageType = "alert"
+		response.Message = messages.Message
+
+		broadcastToAll(clients, response)
+
+		// Broadcast vote result to console
+		broadcastSelectionResultToAll(userManager, webSocketService, gameState)
+
+		time.Sleep(time.Second * 10)
 	}
-
-	nextUser := gameInfo[gameRound-1].PlayerList[gameInfo[gameRound-1].NowUserIndex]
-	if nextUser.UUID == GPTUser.UUID {
-		SendGPTMessage(e.Timestamp)
-		return
-	}
-	mutex.Lock()
-	someoneMessage := Message{
-		Timestamp:   e.Timestamp,
-		MessageId:   int64(len(messages)),
-		User:        adminUser,
-		Message:     fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName),
-		MessageType: "alert",
-	}
-	// messages = append(messages, someoneMessage)
-	someoneResponse := WsJsonResponse{
-		Timestamp:      e.Timestamp,
-		Action:         "your_turn",
-		MessageType:    "alert",
-		Message:        someoneMessage.Message,
-		MaxPlayer:      MaxPlayer,
-		User:           adminUser, // nextUser,
-		MessageLogList: messages,
-		PlayerList:     getPlayerList(),
-		OnlineUserList: getUserList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
-	nextConn, _ := GetWebSocketClientByUUID(nextUser.UUID)
-	// if exists {
-	// 	broadCastToSomeone(someoneResponse, nextConn)
-	// 	mutex.Unlock()
-	// } else {
-	// 	mutex.Unlock()
-
-	// }
-	broadCastToSomeone(clients, nextConn, someoneResponse)
-	mutex.Unlock()
-
 }
 
-func processReadyUser(e WsPayload) {
-	nowUser := players[e.User.UUID]
-	nowUser.PlayerType = "player"
-	log.Println(nowUser.NicknameId)
-	players[e.User.UUID] = nowUser
-	clients[e.Conn] = nowUser
-	sorted_players = append(sorted_players, nowUser)
+// Broadcast vote result to console
+func broadcastSelectionResultToAll(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	clients := webSocketService.GetClients()
 
-	if MaxPlayer == len(getPlayerList()) {
-		sorted_players = ShuffleUsersRandomly(sorted_players)
-		gameRound = 1
-		gameTurnsLeft = gameTurnNum * MaxPlayer
-		initGameInfo()
+	userSelections := gameState.GetNowUserSelections()
 
-		mutex.Lock()
-		message := Message{
-			Timestamp:   e.Timestamp,
-			MessageId:   int64(len(messages)),
-			User:        adminUser,
-			Message:     "게임이 시작되었습니다.",
-			MessageType: "alert",
-		}
-		messages = []Message{message}
+	for _, userSelection := range userSelections {
+		VotedUser := userSelection.User
+		Selection := userSelection.Selection
+		Reason := userSelection.Reason
+		Timestamp := userSelection.Timestamp
+		message := utils.CreateMessageFromUser(userManager, VotedUser, Timestamp)
+		message.Message = fmt.Sprintf("%s님이 [%s]에게 투표했습니다. 사유: %s", VotedUser.UserName, Selection, Reason)
+		message.MessageType = "alert"
 
-		gameInfo[0].TurnsLeft = gameTurnsLeft
-		gameInfo[0].PlayerList = sorted_players
-		response := WsJsonResponse{
-			Timestamp:      e.Timestamp,
-			Action:         "update_state",
-			MessageType:    "alert",
-			Message:        message.Message,
-			MaxPlayer:      MaxPlayer,
-			User:           User{},
-			MessageLogList: messages,
-			PlayerList:     getPlayerList(),
-			OnlineUserList: getUserList(),
-			GameTurnsLeft:  gameTurnsLeft,
-			GameRound:      gameRound,
-			IsGameStarted:  isGameStarted,
-			IsGameOver:     isGameOver,
-		}
+		response := utils.CreateResponseUsingTimestamp(userManager, gameState, Timestamp)
+		response.Action = "new_message_admin"
+		response.MessageType = "alert"
+		response.Message = message.Message
+		response.User = VotedUser
+
 		broadcastToAll(clients, response)
-		mutex.Unlock()
-		isGameStarted = true
-
-		processNextTurn(e.Timestamp)
-		return
+		userManager.AddMessage(message)
 	}
-
-	mutex.Lock()
-	response := WsJsonResponse{
-		Timestamp:      e.Timestamp,
-		Action:         "human_info",
-		MessageType:    "system",
-		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
-		User:           nowUser,
-		OnlineUserList: getUserList(),
-		MessageLogList: messages,
-		MaxPlayer:      MaxPlayer,
-		PlayerList:     getPlayerList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
-	broadcastToAll(clients, response)
-	mutex.Unlock()
-
-	if GPTReadyNum >= len(getPlayerList()) && GPTUser.PlayerType == "watcher" {
-		log.Println("GPTReadyNum:", GPTReadyNum)
-		log.Println("len(getPlayerList()):", len(getPlayerList()))
-		log.Println("GPTUser:", GPTUser)
-
-		time.Sleep(time.Second * 1)
-		processReadyGPT()
-	}
-
 }
 
-func processReadyGPT() {
-	mutex.Lock()
-	GPTUser.PlayerType = "player"
-	nowUser := GPTUser
+func HandleRoundIsOver(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, e models.WsPayload) {
+	isGameStarted := gameState.GetStatus().IsStarted
+	gameTurnsLeft := gameState.GetNowGameInfo().TurnsLeft
+	gameRound := gameState.GetNowGameInfo().Round
+	roundNum := gameState.GetStatus().RoundNum
 
-	sorted_players = append(sorted_players, nowUser)
-
-	timestamp := utils.GetCurrentTimestamp()
-
-	response := WsJsonResponse{
-		Timestamp:      timestamp,
-		Action:         "update_state",
-		MessageType:    "alert",
-		MaxPlayer:      MaxPlayer,
-		User:           nowUser,
-		Message:        fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName),
-		MessageLogList: messages,
-		PlayerList:     getPlayerList(),
-		OnlineUserList: getUserList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
-	broadcastToAll(clients, response)
-	mutex.Unlock()
-
-	if MaxPlayer == len(getPlayerList()) {
-		sorted_players = ShuffleUsersRandomly(sorted_players)
-		gameRound = 1
-		gameTurnsLeft = gameTurnNum * MaxPlayer
-		initGameInfo()
-
-		mutex.Lock()
-		message := Message{
-			Timestamp:   timestamp,
-			MessageId:   int64(len(messages)),
-			User:        adminUser,
-			Message:     "게임이 시작되었습니다.",
-			MessageType: "alert",
-		}
-		messages = []Message{message}
-
-		gameInfo[0].TurnsLeft = gameTurnsLeft
-		gameInfo[0].PlayerList = sorted_players
-		response := WsJsonResponse{
-			Timestamp:      timestamp,
-			Action:         "update_state",
-			MessageType:    "alert",
-			Message:        message.Message,
-			MaxPlayer:      MaxPlayer,
-			User:           GPTUser,
-			MessageLogList: messages,
-			PlayerList:     getPlayerList(),
-			OnlineUserList: getUserList(),
-			GameTurnsLeft:  gameTurnsLeft,
-			GameRound:      gameRound,
-			IsGameStarted:  isGameStarted,
-			IsGameOver:     isGameOver,
-		}
-		broadcastToAll(clients, response)
-		mutex.Unlock()
-
-		processNextTurn(timestamp)
-		isGameStarted = true
+	// Game is not started
+	if !isGameStarted || gameTurnsLeft != 0 {
 		return
 	}
 
+	if roundNum == gameRound {
+		HandleGameOverEvent(userManager, webSocketService, gameState)
+	} else {
+		HandleRoundOverEvent(userManager, webSocketService, gameState)
+	}
+}
+
+func HandleRoundOverEvent(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	gameRound := gameState.GetNowGameInfo().Round
+	gameState.SetIfResetRound(userManager)
+	message := utils.CreateMessageWithAutoTimestamp(userManager, userManager.GetAdminUser())
+	message.MessageType = "alert"
+	message.Message = fmt.Sprintf("%d라운드가 종료되었습니다.", gameRound)
+	userManager.AddMessage(message)
+
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.Action = "restart_round"
+	response.MessageType = "alert"
+	response.Message = message.Message
+	response.User = userManager.GetAdminUser()
+
+	clients := webSocketService.GetClients()
+	broadcastToAll(clients, response)
+
+	userManager.AddPrevMessagesFromMessages()
+	userManager.ClearMessages()
+	userManager.AddMessage(message)
 }

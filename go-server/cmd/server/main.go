@@ -1,47 +1,15 @@
 package main
 
 import (
+	"liar-of-turing/common"
 	"liar-of-turing/internal/handlers"
+	"liar-of-turing/services"
 	"log"
 	"net/http"
-	"os"
-	"sync"
 
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 )
-
-// Counter stores the value of the counter
-type Counter struct {
-	Value int `json:"value"`
-	mu    sync.Mutex
-}
-
-type Message struct {
-	UserName  string `json:"username"`
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Timestamp int64  `json:"timestamp"`
-}
-
-type User struct {
-	UserName string `json:"username"`
-	Role     string `json:"role"`
-}
-
-type Room struct {
-	RoomID string `json:"roomID"`
-	Users  []User `json:"users"`
-}
-
-type RoomList struct {
-	Rooms []Room `json:"rooms"`
-}
-
-type RoomInfo struct {
-	RoomID string `json:"roomID"`
-	Users  []User `json:"users"`
-}
 
 // main is the main function
 func main() {
@@ -62,12 +30,15 @@ func main() {
 		MaxAge:           3000, // 5 min
 	})
 
-	FastAPIURL := os.Getenv("FASTAPI_URL")
+	common.SetFastAPIURL()
 
-	mux := routes()
 	log.Println("Starting channel listener ")
-	go handlers.ListenToWebSocketChannel()
-	go handlers.ListenToGPTWebSocketChannel(FastAPIURL)
+	userManager := services.NewUserManager()
+	webSocketService := services.NewWebSocketService()
+	gameState := services.NewGameState()
+	mux := routes(userManager, webSocketService, gameState)
+	go handlers.ListenToWebSocketChannel(userManager, webSocketService, gameState)
+	// go handlers.ListenToGPTWebSocketChannel(FastAPIURL)
 
 	// bty env
 	server := http.Server{
@@ -84,10 +55,14 @@ func main() {
 
 }
 
-func routes() http.Handler {
+func routes(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", handlers.HandleWebSocketRequest)
-	mux.HandleFunc("/withGPT", handlers.HandleGPTWebSocketRequest)
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandleWebSocketRequest(w, r, userManager, webSocketService, gameState)
+	})
+	mux.HandleFunc("/withGPT", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandleGPTWebSocketRequest(w, r, webSocketService)
+	})
 
 	return mux
 }

@@ -1,4 +1,0 @@
-package room
-
-func main() {
-}

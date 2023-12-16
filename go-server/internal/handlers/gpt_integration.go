@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"liar-of-turing/common"
+	"liar-of-turing/models"
+	"liar-of-turing/services"
 	"liar-of-turing/utils"
 	"log"
 	"net/http"
@@ -12,18 +15,28 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func ListenGPTWebSocketConnections(conn *WebSocketConnection) {
+func HandleGPTWebSocketRequest(w http.ResponseWriter, r *http.Request, webSocketService *services.WebSocketService) {
+	ws, err := webSocketService.UpgradeConfig.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Error upgrading to WebSocket:", err)
+		return
+	}
+
+	conn := models.WebSocketConnection{Conn: ws}
+	log.Println("Client connected to endpoint")
+
+	go ListenToGPTWebSocketConnections(webSocketService, &conn)
+}
+
+func ListenToGPTWebSocketConnections(webSocketService *services.WebSocketService, conn *models.WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("Recovered in ListenForGPTWs:", r)
+			log.Println("Recovered in ListenToGPTWebSocketConnections:", r)
 		}
-		conn.CloseWebSocketConnection() // Safely close the connection
-		mutex.Lock()
-		delete(clients, *conn) // Remove the client from the map
-		mutex.Unlock()
+		webSocketService.RemoveClient(*conn) // Safely close the connection
 	}()
 
-	var payload GPTWsPayload
+	var payload models.GPTWsPayload
 
 	for {
 		err := conn.ReadJSON(&payload)
@@ -38,54 +51,14 @@ func ListenGPTWebSocketConnections(conn *WebSocketConnection) {
 		}
 
 		payload.Conn = *conn
-		GPTBroadcast <- payload
+		webSocketService.GPTBroadcast <- payload
 	}
 }
 
-func ListenToGPTWebSocketChannel(fastAPIURL string) {
-	FastAPIURL = fastAPIURL
-	var response WsJsonResponse
-	for {
-		e := <-GPTBroadcast
-		log.Println("GPTBroadcast:", e)
-		mutex.Lock()
-		message := Message{
-			Timestamp:   utils.GetCurrentTimestamp(),
-			MessageId:   int64(len(messages)),
-			User:        GPTUser,
-			Message:     e.Message,
-			MessageType: "message",
-		}
-		messages = append(messages, message)
-		response = WsJsonResponse{
-			Timestamp:      utils.GetCurrentTimestamp(),
-			Action:         "new_message",
-			User:           GPTUser,
-			Message:        e.Message,
-			MessageLogList: messages,
-			MessageType:    "message",
-			MaxPlayer:      MaxPlayer,
-		}
-		broadcastToAll(clients, response)
-	}
-}
-
-func HandleGPTWebSocketRequest(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgradeConnection.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println("Error upgrading to WebSocket:", err)
-		return
-	}
-
-	conn := WebSocketConnection{Conn: ws}
-	log.Println("Client connected to endpoint")
-
-	go ListenGPTWebSocketConnections(&conn)
-}
-
-func sendGPTMessageToFastAPI(message string) MessageData {
+func ForwardMessageToGPTAPI(GPTUser common.User, message string) models.MessageData {
+	FastAPIURL := common.GetFastAPIURL()
 	url := FastAPIURL + "/useGPT"
-	msgData := MessageData{
+	msgData := models.MessageData{
 		UserUUID: GPTUser.UUID,
 		Message:  message,
 	}
@@ -108,7 +81,7 @@ func sendGPTMessageToFastAPI(message string) MessageData {
 	}
 	log.Printf("Response body: %s", string(body))
 
-	var gptResponse MessageData
+	var gptResponse models.MessageData
 	err = json.Unmarshal(body, &gptResponse)
 	if err != nil {
 		log.Fatalf("Error occurred during unmarshaling. Error: %s", err.Error())
@@ -117,56 +90,47 @@ func sendGPTMessageToFastAPI(message string) MessageData {
 	return gptResponse
 }
 
-func SendGPTMessage(timestamp int64) {
+func ProcessGPTSendMessage(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, gptIndex int) {
 	log.Println("=================================================")
-	log.Println("SendGPTMessage")
+	log.Println("SendGPTWsMessage")
+	clients := webSocketService.GetClients()
+	GPTUser := userManager.GetGPTUsers()[gptIndex]
 
 	// var gptResponse WsJsonResponse
+	messages := userManager.GetMessages()
+
 	MessageLogString := ""
 	for _, v := range messages {
 		if v.User.UserName != "admin" {
 			MessageLogString += fmt.Sprintf("%s: %s\n", v.User.UserName, v.Message)
 		}
 	}
+	MessageLogString += fmt.Sprintf("%s: ", GPTUser.UserName)
 	log.Println("MessageLogString:", MessageLogString)
-	gptResponse := sendGPTMessageToFastAPI(MessageLogString)
+	gptResponse := ForwardMessageToGPTAPI(GPTUser, MessageLogString)
 	log.Println("gptResponse:", gptResponse)
 
-	gameInfo[gameRound-1].NowUserIndex = (gameInfo[gameRound-1].NowUserIndex + 1) % gameInfo[gameRound-1].MaxPlayer
-	gameTurnsLeft = utils.Max(gameTurnsLeft-1, 0)
-	gameInfo[gameRound-1].TurnsLeft = gameTurnsLeft
+	gameState.SetNextTurnInfo()
 
-	mutex.Lock()
+	message := utils.CreateMessageWithAutoTimestamp(userManager, GPTUser)
+	message.Message = gptResponse.Message
 
-	message := Message{
-		Timestamp:   timestamp,
-		MessageId:   int64(len(messages)),
-		User:        GPTUser,
-		Message:     gptResponse.Message,
-		MessageType: "message",
-	}
-	messages = append(messages, message)
-	chatResponse := WsJsonResponse{
-		Timestamp:      timestamp,
-		Action:         "new_message",
-		MessageType:    "message",
-		Message:        message.Message,
-		MaxPlayer:      MaxPlayer,
-		User:           GPTUser,
-		MessageLogList: messages,
-		OnlineUserList: getUserList(),
-		PlayerList:     getPlayerList(),
-		GameTurnsLeft:  gameTurnsLeft,
-		GameRound:      gameRound,
-		IsGameStarted:  isGameStarted,
-		IsGameOver:     isGameOver,
-	}
-	broadcastToAll(clients, chatResponse)
-	mutex.Unlock()
+	userManager.AddMessage(message)
 
-	if gameTurnsLeft == 0 {
-		processGameOver(timestamp)
-		return
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.Action = "new_message"
+	response.Message = message.Message
+	response.User = GPTUser
+	broadcastToAll(clients, response)
+
+	ProcessNextTurn(userManager, webSocketService, gameState, message.Timestamp)
+}
+
+func CreateMessagesFromGameStatus(gameInfo []models.Game) []models.Message {
+	messages := make([]models.Message, 0)
+	for _, v := range gameInfo {
+		messages = append(messages, v.Messages...)
 	}
-	processNextTurn(utils.GetCurrentTimestamp())
+	return messages
+
 }
