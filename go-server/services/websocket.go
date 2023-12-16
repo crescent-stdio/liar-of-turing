@@ -37,6 +37,8 @@ func NewWebSocketService() *WebSocketService {
 
 // GetUpgradeConfig
 func (ws *WebSocketService) GetUpgradeConfig() websocket.Upgrader {
+	ws.mutex.Lock()
+	defer ws.mutex.Unlock()
 	return ws.UpgradeConfig
 }
 

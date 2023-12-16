@@ -4,6 +4,7 @@ import (
 	"liar-of-turing/common"
 	"liar-of-turing/internal/handlers"
 	"liar-of-turing/services"
+	"liar-of-turing/utils"
 	"log"
 	"net/http"
 
@@ -31,11 +32,16 @@ func main() {
 	})
 
 	common.SetFastAPIURL()
+	utils.LoadNicknames()
 
 	log.Println("Starting channel listener ")
 	userManager := services.NewUserManager()
+	userManager.SetAdminUserByDefault()
+	userManager.SetGPTUsersByDefault()
 	webSocketService := services.NewWebSocketService()
 	gameState := services.NewGameState()
+	gameState.SetGPTEntryNums()
+	gameState.SetGPTReadyNums()
 	mux := routes(userManager, webSocketService, gameState)
 	go handlers.ListenToWebSocketChannel(userManager, webSocketService, gameState)
 	// go handlers.ListenToGPTWebSocketChannel(FastAPIURL)

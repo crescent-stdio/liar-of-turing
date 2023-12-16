@@ -23,7 +23,7 @@ type UserManager struct {
 	PrevMessages  [][]models.Message
 	Nicknames     []common.Nickname
 	adminUser     common.User
-	gptUser       []common.User
+	gptUsers      []common.User
 }
 
 // NewUserManager is a constructor for UserManager
@@ -32,8 +32,8 @@ func NewUserManager() *UserManager {
 	players := make(map[string]common.User)
 
 	// add admin user into players
-	admin := GenerateAdminUser()
-	players[admin.UUID] = admin
+	adminUser := GenerateAdminUser()
+	players[adminUser.UUID] = adminUser
 
 	// add gpt users into players
 	gptUsers := GenerateGPTUsers(global.GPTNum)
@@ -44,7 +44,7 @@ func NewUserManager() *UserManager {
 	return &UserManager{
 		MaxPlayer:     global.MaxPlayer,
 		TotalUsers:    0,
-		Players:       make(map[string]common.User),
+		Players:       players,
 		SortedPlayers: make([]common.User, 0),
 		Messages:      make([]models.Message, 0),
 		PrevMessages:  make([][]models.Message, 0),
@@ -98,40 +98,66 @@ func GetMaxPlayer() int {
 	return global.MaxPlayer
 }
 
-func GetAdminUser() common.User {
-	return GenerateAdminUser()
+func (um *UserManager) GetAdminUser() common.User {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	return um.adminUser
+}
+
+// SetAdminUser
+func (um *UserManager) SetAdminUser(adminUser common.User) {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	um.adminUser = adminUser
+}
+
+// SetAdminUserByDefault
+func (um *UserManager) SetAdminUserByDefault() {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	um.adminUser = GenerateAdminUser()
 }
 
 func (um *UserManager) GetGPTUsers() []common.User {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
-	gptUsers := make([]common.User, 0)
-	gptUsers = append(gptUsers, um.gptUser...)
-	return gptUsers
+	return um.gptUsers
 }
 
 // SetGPTUsers
 func (um *UserManager) SetGPTUsers(gptUsers []common.User) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
-	um.gptUser = gptUsers
+	um.gptUsers = gptUsers
+}
+
+// SetGPTUsersByDefault
+func (um *UserManager) SetGPTUsersByDefault() {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	um.gptUsers = GenerateGPTUsers(global.GPTNum)
 }
 
 // GenerateAdminUser: Generate admin user
 func GenerateAdminUser() common.User {
-	return common.User{
+	// um.mutex.Lock()
+	// defer um.mutex.Unlock()
+
+	adminUser := common.User{
 		UUID:       "0",
 		UserId:     0,
 		UserName:   "server",
-		NicknameId: 999,
+		NicknameId: 0,
 		Role:       "admin",
 		IsOnline:   false,
 		PlayerType: "admin",
 	}
+	return adminUser
 }
 
 // GenerateGPTUsers: Generate gpt users
 func GenerateGPTUsers(num int) []common.User {
+
 	var gptUsers []common.User
 	for i := 0; i < num; i++ {
 		gptUsers = append(gptUsers, GenerateGPTUser(i+1000))
@@ -157,7 +183,7 @@ func (um *UserManager) SetGPTUser(index int, user common.User) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
 
-	um.gptUser[index] = user
+	um.gptUsers[index] = user
 }
 
 // SetPlayersByUUID: Set players by User data
@@ -174,16 +200,18 @@ func (um *UserManager) SetPlayersByUser(user common.User) {
 
 // SetAllUsersAsWatchers: Set all users as watchers
 func (um *UserManager) SetAllUsersAsWatchers() {
-	um.mutex.TryLock()
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
 	for uuid, player := range um.Players {
 		player.PlayerType = "watcher"
 		um.Players[uuid] = player
 	}
-	um.mutex.Unlock()
 }
 
 // ShuffleSortedUsersRandomly: Shuffle users randomly
 func (um *UserManager) SetRandomlyShuffledPlayers(webSocketService *WebSocketService, gameState *GameState) {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
 	seed := time.Now().UnixNano()
 	src := rand.NewSource(seed)
 	rand := rand.New(src)
@@ -271,7 +299,7 @@ func (um *UserManager) ExcludePlayersFromSelections(webSocketService *WebSocketS
 
 // GetNicknames: Get nicknames
 func (um *UserManager) GetNicknames() []common.Nickname {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
 	return um.Nicknames
 }
@@ -288,16 +316,25 @@ func (um *UserManager) GenerateRandomUsername() (int, string) {
 	for _, v := range perm {
 		if !nicknames[v].IsUsed {
 			nicknames[v].IsUsed = true
+			um.SetNicknamesToUsed(v)
 			return nicknames[v].Id, nicknames[v].Nickname
 		}
 	}
 	return -1, ""
 }
 
+// SetNicknamesToUsed: Set nicknames to used
+func (um *UserManager) SetNicknamesToUsed(index int) {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	um.Nicknames[index].IsUsed = true
+}
+
 // GetMessages: Get messages
 func (um *UserManager) GetMessages() []models.Message {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	return um.Messages
 }
 
@@ -305,66 +342,66 @@ func (um *UserManager) GetMessages() []models.Message {
 func (um *UserManager) AddMessage(message models.Message) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	um.Messages = append(um.Messages, message)
 }
 
 func (um *UserManager) GetTotalUsersByClients(webSocketService *WebSocketService) int {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	return len(webSocketService.GetClients())
 }
 func (um *UserManager) SetTotalUsers(totalUsers int) {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
 	um.TotalUsers = totalUsers
 }
 
-// GetTotalUsers: Get total users
-func (um *UserManager) GetAdminUser() common.User {
-	um.mutex.Unlock()
-	defer um.mutex.Unlock()
-	return um.adminUser
-}
-
 // SetPrevMessages: Set prev messages
 func (um *UserManager) AddPrevMessagesFromMessages() {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	um.PrevMessages = append(um.PrevMessages, um.Messages)
 }
 
 // ClearMessages: Clear messages
 func (um *UserManager) ClearMessages() {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	um.Messages = make([]models.Message, 0)
 }
 
 // ResetPlayers
 func (um *UserManager) ResetPlayers() {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	um.Players = make(map[string]common.User)
 	um.SortedPlayers = make([]common.User, 0)
 }
 
 // GetPlayerByUUID
 func (um *UserManager) GetPlayerByUUID(uuid string) (common.User, bool) {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	player, exists := um.Players[uuid]
 	return player, exists
 }
 
 // AddSortedPlayer
 func (um *UserManager) AddSortedPlayer(player common.User) {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
+
 	um.SortedPlayers = append(um.SortedPlayers, player)
 }
 
 func (um *UserManager) SetSortedPlayers(players []common.User) {
-	um.mutex.Unlock()
+	um.mutex.Lock()
 	defer um.mutex.Unlock()
 	um.SortedPlayers = players
 }

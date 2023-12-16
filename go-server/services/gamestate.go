@@ -4,6 +4,7 @@ import (
 	"liar-of-turing/common"
 	"liar-of-turing/global"
 	"liar-of-turing/models"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -36,7 +37,7 @@ func NewGameState() *GameState {
 		TurnsNum:  gameTurnNum,
 		RoundNum:  gameRoundNum,
 		MaxPlayer: gameMaxPlayer,
-		InfoIdx:   -1,
+		InfoIdx:   0,
 	}
 
 	return &GameState{
@@ -50,14 +51,18 @@ func NewGameState() *GameState {
 
 // SetGPTReadyNums: Get random GPTReadyNums(Timing of GPT ready) / [2, maxPlayer)
 func (gs *GameState) SetGPTReadyNums() {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+
 	seed := time.Now().UnixNano()
 	src := rand.NewSource(seed)
 	rand := rand.New(src)
 
-	// Create a slice with all possible numbers in the range [2, maxPlayer).
-	possibleNums := make([]int, global.MaxPlayer-2)
-	for i := 2; i < global.MaxPlayer; i++ {
-		possibleNums[i] = i
+	GPTEntryNums := gs.GPTEntryNums
+	// Create a slice with all possible numbers in the range [1, maxPlayer).
+	possibleNums := make([]int, 0)
+	for i := 2; i <= global.MaxPlayer; i++ {
+		possibleNums = append(possibleNums, i)
 	}
 
 	// Shuffle the slice to randomize the order.
@@ -67,10 +72,16 @@ func (gs *GameState) SetGPTReadyNums() {
 
 	// Select the first gptNum numbers from the shuffled slice.
 	GPTReadyNums := make([]int, global.GPTNum)
-	copy(GPTReadyNums, possibleNums[:global.GPTNum])
+	// copy(GPTReadyNums, possibleNums[:global.GPTNum])
+	for _, v := range possibleNums {
+		for idx, w := range GPTEntryNums {
+			if v > w && GPTReadyNums[idx] == 0 {
+				GPTReadyNums[idx] = v
+				break
+			}
+		}
+	}
 
-	gs.mutex.Lock()
-	defer gs.mutex.Unlock()
 	gs.GPTReadyNums = GPTReadyNums
 
 }
@@ -84,14 +95,17 @@ func (gs *GameState) GetGPTReadyNums() []int {
 
 // SetGPTEntryNums: selects 2 numbers from 1 to max_player-1
 func (gs *GameState) SetGPTEntryNums() {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+
 	seed := time.Now().UnixNano()
 	src := rand.NewSource(seed)
 	rand := rand.New(src)
 
 	// Create a slice with all possible numbers in the range [1, maxPlayer-1).
-	possibleNums := make([]int, global.MaxPlayer-1)
-	for i := 1; i < global.MaxPlayer-1; i++ {
-		possibleNums[i] = i
+	possibleNums := make([]int, 0)
+	for i := 1; i < global.MaxPlayer; i++ {
+		possibleNums = append(possibleNums, i)
 	}
 
 	// Shuffle the slice to randomize the order.
@@ -103,8 +117,6 @@ func (gs *GameState) SetGPTEntryNums() {
 	entryNums := make([]int, global.GPTNum)
 	copy(entryNums, possibleNums[:global.GPTNum])
 
-	gs.mutex.Lock()
-	defer gs.mutex.Unlock()
 	gs.GPTEntryNums = entryNums
 }
 
@@ -122,6 +134,8 @@ func (gs *GameState) GetAllGameInfo() []models.Game {
 }
 
 func (gs *GameState) SearchUserInUserSelections(idx int, user common.User) (models.UserSelection, bool) {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
 	for _, v := range gs.Info[idx].UserSelections {
 		if v.User.UUID == user.UUID {
 			return v, true
@@ -134,6 +148,9 @@ func (gs *GameState) SearchUserInUserSelections(idx int, user common.User) (mode
 func (gs *GameState) GetUserSelections() []models.UserSelection {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	if len(gs.Info) == 0 {
+		return make([]models.UserSelection, 0)
+	}
 	return gs.Info[gs.Status.InfoIdx].UserSelections
 }
 
@@ -141,6 +158,9 @@ func (gs *GameState) GetUserSelections() []models.UserSelection {
 func (gs *GameState) GetNowUserSelections() []models.UserSelection {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	if len(gs.Info) == 0 {
+		return make([]models.UserSelection, 0)
+	}
 	return gs.Info[gs.Status.InfoIdx].UserSelections
 }
 
@@ -149,6 +169,9 @@ func (gs *GameState) GetNowUserSelections() []models.UserSelection {
 func (gs *GameState) SetUserSelections(userSelections []models.UserSelection) {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	if len(gs.Info) == 0 {
+		return
+	}
 	gs.Info[gs.Status.InfoIdx].UserSelections = userSelections
 }
 
@@ -298,6 +321,17 @@ func (gs *GameState) SetGameRoundNum(roundNum int) {
 func (gs *GameState) GetNowGameInfo() models.Game {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	if len(gs.Info) == 0 {
+		return models.Game{
+			NowUserIndex:   0,
+			MaxPlayer:      0,
+			PlayerList:     make([]common.User, 0),
+			Round:          gs.Status.RoundNum,
+			TurnsLeft:      gs.Status.TurnsNum * gs.Status.RoundNum,
+			UserSelections: make([]models.UserSelection, 0),
+			Messages:       make([]models.Message, 0),
+		}
+	}
 	return gs.Info[gs.Status.InfoIdx]
 }
 
@@ -305,13 +339,19 @@ func (gs *GameState) GetNowGameInfo() models.Game {
 func (gs *GameState) CheckIsRoundOver() bool {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	if len(gs.Info) == 0 {
+		return false
+	}
 	return gs.Info[gs.Status.InfoIdx].TurnsLeft == 0
 }
 
 // CheckAllUserVote: Check if all user vote
-func (gs *GameState) CheckAllUserVote() bool {
+func (gs *GameState) CheckAllUserVoted() bool {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	if len(gs.Info) == 0 {
+		return false
+	}
 	return len(gs.Info[gs.Status.InfoIdx].UserSelections) == len(gs.Info[gs.Status.InfoIdx].PlayerList)
 }
 
@@ -326,8 +366,30 @@ func (gs *GameState) SetMaxPlayer(maxPlayer int) {
 func (gs *GameState) CheckAllUserReady(userManager *UserManager) bool {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	log.Println("CheckAllUserReady")
+	humanPlayerNum := gs.GetHumanPlayerNum(userManager)
+	log.Println("humanPlayerNum", humanPlayerNum)
 	if len(gs.Info) == 0 {
-		return len(userManager.GetPlayers()) == gs.Status.MaxPlayer
+		return humanPlayerNum == gs.Status.MaxPlayer
 	}
-	return len(userManager.GetPlayers()) == gs.Info[gs.Status.InfoIdx].MaxPlayer
+	return humanPlayerNum == gs.Info[gs.Status.InfoIdx].MaxPlayer
+}
+
+// CheckIsGameOver: Check if game is over
+func (gs *GameState) CheckIsGameOver() bool {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+	return gs.Status.IsOver
+}
+
+func (gs *GameState) GetHumanPlayerNum(userManager *UserManager) int {
+	log.Println("GetHumanPlayerNum")
+	humanPlayerNum := 0
+	log.Println("userManager.GetSortedPlayers()", userManager.GetSortedPlayers())
+	for _, v := range userManager.GetSortedPlayers() {
+		if v.Role == "human" {
+			humanPlayerNum++
+		}
+	}
+	return humanPlayerNum
 }

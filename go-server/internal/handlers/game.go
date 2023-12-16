@@ -38,12 +38,14 @@ func HandleAISelection(gameState *services.GameState, e models.WsPayload) {
 	gameState.AddUserSelection(selection)
 }
 func ProcessNextTurn(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, timestamp int64) {
-	print("ProcessNextTurn")
-
+	if !gameState.CheckAllUserReady(userManager) {
+		return
+	}
 	if gameState.CheckIsRoundOver() {
 		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
 		return
 	}
+	log.Println("ProcessNextTurn")
 
 	adminUser := userManager.GetAdminUser()
 	GPTUsers := userManager.GetGPTUsers()

@@ -183,12 +183,21 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 			log.Printf("Unknown action: %s\n", e.Action)
 		}
 		ProcessGPTEntering(userManager, webSocketService, gameState)
+		log.Println("ProcessGPTReady")
 		ProcessGPTReady(userManager, webSocketService, gameState)
+		log.Println("ProcessAllPlayersReady")
 		ProcessAllPlayersReady(userManager, webSocketService, gameState)
+		log.Println("ProcessAllPlayersVoted")
 		ProcessNextTurn(userManager, webSocketService, gameState, e.Timestamp)
+		log.Println("ProcessAllPlayersVoted")
 		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
 		// next game or next round
+		log.Println("HandleRoundIsOver")
 		HandleRoundIsOver(userManager, webSocketService, gameState, e)
+
+		log.Println("GPTEnterNums:", gameState.GetGPTEntryNums())
+		log.Println("GPTReadyNums:", gameState.GetGPTReadyNums())
+		log.Println("=================================================")
 	}
 }
 
@@ -209,12 +218,14 @@ func HandleUserReady(userManager *services.UserManager, webSocketService *servic
 	webSocketService.AddClient(e.Conn, nowUser)
 
 	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+	message.User = adminUser
 	message.MessageType = "info"
 	message.Message = fmt.Sprintf("%s님이 게임에 참여했습니다.", nowUser.UserName)
 	userManager.AddMessage(message)
 	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
 	response.Action = "human_info"
 	response.MessageType = "system"
+	response.User = nowUser
 	response.Message = message.Message
 	broadcastToAll(clients, response)
 
@@ -264,16 +275,22 @@ func ProcessGPTEntering(userManager *services.UserManager, webSocketService *ser
 		// If GPT's Entring time cames...(GPTUser isn't ONLINE)
 		if !GPTUser.IsOnline && GPTEntryNum >= OnlineUserNum {
 			time.Sleep(time.Second * 1)
-			HandelGPTEntry(userManager, webSocketService, gameState, idx)
-			time.Sleep(time.Second * 1)
+			HandleGPTEntry(userManager, webSocketService, gameState, idx)
 		}
 	}
 }
 
-func HandelGPTEntry(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, index int) {
+func HandleGPTEntry(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, index int) {
 	clients := webSocketService.GetClients()
 	adminUser := userManager.GetAdminUser()
 	GPTUser := userManager.GetGPTUsers()[index]
+	nicknameId, userName := userManager.GenerateRandomUsername()
+	GPTUser.NicknameId = nicknameId
+	GPTUser.UserName = userName
+	GPTUser.PlayerType = "watcher"
+	GPTUser.IsOnline = true
+	userManager.SetGPTUser(index, GPTUser)
+	log.Println("GPTUser:", GPTUser)
 
 	// set GPTUser to true
 	GPTUser.IsOnline = true
@@ -282,6 +299,7 @@ func HandelGPTEntry(userManager *services.UserManager, webSocketService *service
 
 	// Make Message & Response
 	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.User = adminUser
 	message.MessageType = "info"
 	message.Message = fmt.Sprintf("%s님이 채팅방에 입장했습니다.", GPTUser.UserName)
 	userManager.AddMessage(message)
@@ -289,6 +307,7 @@ func HandelGPTEntry(userManager *services.UserManager, webSocketService *service
 	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.Action = "human_info"
 	response.MessageType = "system"
+	response.User = GPTUser
 	response.Message = message.Message
 
 	broadcastToAll(clients, response)
@@ -304,7 +323,6 @@ func ProcessGPTReady(userManager *services.UserManager, webSocketService *servic
 		if GPTUser.PlayerType == "watcher" && GPTReadyNum >= ReadyPlayerNum {
 			time.Sleep(time.Second * 1)
 			HandleGPTReady(userManager, webSocketService, gameState, idx)
-			time.Sleep(time.Second * 1)
 		}
 	}
 }
@@ -330,41 +348,41 @@ func HandleGPTReady(userManager *services.UserManager, webSocketService *service
 	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.Action = "human_info"
 	response.MessageType = "system"
+	response.User = GPTUser
 	response.Message = message.Message
 
 	broadcastToAll(clients, response)
 }
 
 func ProcessAllPlayersVoted(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	if !gameState.CheckAllUserVoted() {
+		return
+	}
 	clients := webSocketService.GetClients()
 	gameInfo := gameState.GetNowGameInfo()
 	gameRound := gameInfo.Round
-	userSelections := gameState.GetNowUserSelections()
 	AdmminUser := userManager.GetAdminUser()
-	GPTUsers := userManager.GetGPTUsers()
 
-	if len(userSelections) == gameInfo.MaxPlayer-len(GPTUsers) {
-		gameState.SetIfRoundIsOver()
-		voteNum, eliminatedPlayer, remainingPlayerList := userManager.ExcludePlayersFromSelections(webSocketService, gameState)
+	gameState.SetIfRoundIsOver()
+	voteNum, eliminatedPlayer, remainingPlayerList := userManager.ExcludePlayersFromSelections(webSocketService, gameState)
 
-		userManager.SetSortedPlayers(remainingPlayerList)
+	userManager.SetSortedPlayers(remainingPlayerList)
 
-		messages := utils.CreateMessageWithAutoTimestamp(userManager, AdmminUser)
-		messages.MessageType = "alert"
-		messages.Message = fmt.Sprintf("%d라운드가 종료되었습니다. 탈락자는 %d표를 받은 [%s]입니다.", gameRound, voteNum, eliminatedPlayer.UserName)
+	messages := utils.CreateMessageWithAutoTimestamp(userManager, AdmminUser)
+	messages.MessageType = "alert"
+	messages.Message = fmt.Sprintf("%d라운드가 종료되었습니다. 탈락자는 %d표를 받은 [%s]입니다.", gameRound, voteNum, eliminatedPlayer.UserName)
 
-		response := utils.CreateInitalizeResponse(userManager, gameState)
-		response.Action = ""
-		response.MessageType = "alert"
-		response.Message = messages.Message
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.Action = ""
+	response.MessageType = "alert"
+	response.Message = messages.Message
 
-		broadcastToAll(clients, response)
+	broadcastToAll(clients, response)
 
-		// Broadcast vote result to console
-		broadcastSelectionResultToAll(userManager, webSocketService, gameState)
+	// Broadcast vote result to console
+	broadcastSelectionResultToAll(userManager, webSocketService, gameState)
 
-		time.Sleep(time.Second * 10)
-	}
+	time.Sleep(time.Second * 10)
 }
 
 // Broadcast vote result to console
@@ -394,17 +412,12 @@ func broadcastSelectionResultToAll(userManager *services.UserManager, webSocketS
 }
 
 func HandleRoundIsOver(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, e models.WsPayload) {
-	isGameStarted := gameState.GetStatus().IsStarted
-	gameTurnsLeft := gameState.GetNowGameInfo().TurnsLeft
-	gameRound := gameState.GetNowGameInfo().Round
-	roundNum := gameState.GetStatus().RoundNum
-
 	// Game is not started
-	if !isGameStarted || gameTurnsLeft != 0 {
+	if !gameState.CheckIsRoundOver() {
 		return
 	}
 
-	if roundNum == gameRound {
+	if !gameState.CheckIsGameOver() {
 		HandleGameOverEvent(userManager, webSocketService, gameState)
 	} else {
 		HandleRoundOverEvent(userManager, webSocketService, gameState)

@@ -1,6 +1,6 @@
 package global
 
-var MaxPlayer = 6
+var MaxPlayer = 4
 var GameTurnNum = 2
 var GameRoundNum = 1
 

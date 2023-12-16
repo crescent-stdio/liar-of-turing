@@ -16,6 +16,7 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 
 	isGameStarted := gameState.GetStatus().IsStarted
 	isGameOver := gameState.GetStatus().IsOver
+	log.Println("isGameStarted:", isGameStarted, "isGameOver:", isGameOver)
 
 	// If user is not in players map, create new user
 	if !exists {
@@ -36,11 +37,19 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 	webSocketService.AddClient(e.Conn, nowUser)
 
 	// broadcast to all
+	adminUser := userManager.GetAdminUser()
+	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+	message.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
+	message.MessageType = "system"
 
 	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
 	response.Action = "human_info"
+	response.User = adminUser
 	response.MessageType = "system"
-	response.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
+	response.Message = message.Message
+	log.Println("response:", response)
+
+	clients = webSocketService.GetClients()
 	broadcastToAll(clients, response)
 
 	// Round is over And enter the web application(previous User was player)
