@@ -41,24 +41,6 @@ Amidst this societal backdrop, our project draws inspiration from the Turing Tes
 3. 각자 차례에 따라 한 마디씩 말하며 상호작용합니다. 각자 주어진 역할이나 임무, 질의응답을 수행합니다.
 4. 대화가 일정 횟수 진행된 후, 참가자들은 채팅방 내의 AI 에이전트를 추측하여 투표합니다.
 
-```
-/chat-server
-    /cmd
-        /server
-            main.go  // 채팅 서버 애플리케이션의 진입점
-    /internal
-        /websocket
-            websocket.go  // 웹소켓 관리 (연결, 메시지 전송 등)
-        /handler
-            handler.go  // HTTP 요청 핸들러 (웹소켓 업그레이드 등)
-        /room
-            room.go    // 채팅방 관리 로직
-    /pkg
-        /logger
-            logger.go  // 로깅 유틸리티
-    README.md
-```
-
 
 <br>
 
