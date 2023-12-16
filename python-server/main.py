@@ -10,8 +10,8 @@ app = FastAPI()
 
 @app.post("/useGPT")
 def get_message_from_GPT(messageRequest: MessageData):
-    print(messageRequest.message)
-    chatlog = messageRequest.message
+    print(messageRequest.gptName, messageRequest.message)
+    chatlog = messageRequest.message + f'\n{messageRequest.gptName}'
 
     completion = client.chat.completions.create(
     model="gpt-4",
@@ -30,7 +30,7 @@ def get_message_from_GPT(messageRequest: MessageData):
     answer = completion.choices[0].message.content
     answer = answer.split(':')[1].lstrip()
     print("result_message: ", answer)
-    return {"user_UUID": messageRequest.user_UUID, "message": answer}
+    return {"gptName": messageRequest.gptName, "message": answer}
 
 #     return completion.choices[0].message.content
 
