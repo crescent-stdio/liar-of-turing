@@ -194,9 +194,9 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 		log.Println("ProcessAllPlayersVoted")
 		ProcessNextTurn(userManager, webSocketService, gameState) //, e.Timestamp)
 		log.Println("ProcessAllPlayersVoted")
-		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
 		log.Println("HandleRoundIsOver")
 		HandleRoundIsOver(userManager, webSocketService, gameState)
+		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
 		log.Println("GPTEnterNums:", gameState.GetGPTEntryNums())
 		log.Println("GPTReadyNums:", gameState.GetGPTReadyNums())
 		log.Println("userSelections:", gameState.GetNowUserSelections())
@@ -447,16 +447,17 @@ func broadcastSelectionResultToAll(userManager *services.UserManager, webSocketS
 		message := utils.CreateMessageFromUser(userManager, VotedUser, Timestamp)
 		message.Message = fmt.Sprintf("%s님이 [%s]에게 투표했습니다. 사유: %s", VotedUser.UserName, Selection, Reason)
 		message.MessageType = "info"
+		userManager.AddMessage(message)
 
 		response := utils.CreateResponseUsingTimestamp(userManager, gameState, Timestamp)
-		response.Action = "new_message_admin"
+		response.Action = "update_state"
 		response.MessageType = "info"
 		response.Message = message.Message
 		response.User = VotedUser
 
 		broadcastToAll(clients, response)
-		userManager.AddMessage(message)
 	}
+	HandleGameOverEvent(userManager, webSocketService, gameState)
 }
 
 func HandleRoundIsOver(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
@@ -475,10 +476,11 @@ func HandleRoundIsOver(userManager *services.UserManager, webSocketService *serv
 	if !gameState.CheckAllUserReady(userManager) {
 		return
 	}
-	if gameState.CheckIsRoundOver() && gameState.CheckAllUserVoted(userManager) { // TODO: CheckIsGameOver
-		log.Println("HandleGameOverEvent")
-		HandleGameOverEvent(userManager, webSocketService, gameState)
-	} else if gameState.CheckIsRoundOver() && !gameState.CheckAllUserVoted(userManager) {
+	// if gameState.CheckIsRoundOver() && gameState.CheckAllUserVoted(userManager) { // TODO: CheckIsGameOver
+	// 	log.Println("HandleGameOverEvent")
+	// 	// HandleGameOverEvent(userManager, webSocketService, gameState)
+	// } else
+	if gameState.CheckIsRoundOver() && !gameState.CheckAllUserVoted(userManager) {
 		HandleRoundOverEvent(userManager, webSocketService, gameState)
 	}
 }

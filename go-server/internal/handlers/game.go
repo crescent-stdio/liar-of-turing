@@ -94,23 +94,24 @@ func ProcessNextTurn(userManager *services.UserManager, webSocketService *servic
 }
 
 func HandleGameOverEvent(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	// time.Sleep(5 * time.Second)
 	clients := webSocketService.GetClients()
 	adminUser := userManager.GetAdminUser()
 	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
-	message.Message = "게임이 종료되었습니다. 10초 후에 자동으로 재시작됩니다."
+	message.Message = "게임이 종료되었습니다. 자동으로 재시작됩니다."
 	message.MessageType = "info"
 
+	userManager.AddMessage(message)
+	// userManager.AddPrevMessagesFromMessages()
+	// userManager.ClearMessages()
+
 	response := utils.CreateInitalizeResponse(userManager, gameState)
-	response.Action = "game_over"
+	response.Action = "update_state"
 	response.Message = message.Message
 	response.MessageType = message.MessageType
 	response.User = message.User
 
 	broadcastToAll(clients, response)
+	// time.Sleep(10 * time.Second)
 
-	userManager.AddMessage(message)
-	userManager.AddPrevMessagesFromMessages()
-	userManager.ClearMessages()
-
-	gameState.SetIfResetRound(userManager)
 }

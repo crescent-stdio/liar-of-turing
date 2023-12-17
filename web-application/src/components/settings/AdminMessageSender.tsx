@@ -25,7 +25,6 @@ const AdminMessageSender: React.FC<AdminMessageSenderProps> = ({
     event.preventDefault();
     const username = testUsername;
     const message = testMessage;
-    console.log(username, message);
     if (username.length > 0 && message.length > 0) {
       const testUserData = userList.find(
         (user: User) => user.username === username
@@ -39,6 +38,8 @@ const AdminMessageSender: React.FC<AdminMessageSenderProps> = ({
         message: testMessage,
         game_round: 0,
         game_turns_left: 0,
+        game_round_num: 0,
+        game_turn_num: 0,
         user_selection: initialUserSelection,
       };
       sendMessage(jsonData);

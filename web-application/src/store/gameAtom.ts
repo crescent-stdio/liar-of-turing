@@ -32,3 +32,5 @@ export const isFinishedSubmitionAtom = atom<boolean>(false);
 
 export const userSelectionAtom = atom<UserSelection>(initialUserSelection);
 export const userSelectionListAtom = atom<UserSelection[]>([]);
+
+export const isFinishedShowResultAtom = atom<boolean>(false);

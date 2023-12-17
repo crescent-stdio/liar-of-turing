@@ -207,8 +207,8 @@ func (um *UserManager) SetPlayerByUser(user common.User) {
 
 // SetAllUsersAsWatchers: Set all users as watchers
 func (um *UserManager) SetAllUsersAsWatchers() {
-	um.mutex.Lock()
-	defer um.mutex.Unlock()
+	// um.mutex.Lock()
+	// defer um.mutex.Unlock()
 	for uuid, player := range um.Players {
 		player.PlayerType = "watcher"
 		um.Players[uuid] = player
@@ -402,8 +402,17 @@ func (um *UserManager) ResetPlayers() {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
 
+	players := um.Players
+
 	um.Players = make(map[string]common.User)
+	for uuid, player := range players {
+		if player.Role == "human" {
+			player.PlayerType = "watcher"
+			um.Players[uuid] = player
+		}
+	}
 	um.SortedPlayers = make([]common.User, 0)
+
 }
 
 // GetPlayerByUUID

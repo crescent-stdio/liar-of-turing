@@ -21,7 +21,6 @@ export default function ChooseAIInput({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const handleChooseAI = (event: React.FormEvent<HTMLFormElement>) => {
-    console.log(AIUsername, reason);
     event.preventDefault();
     const user_selection: UserSelection = {
       timestamp: Date.now(),

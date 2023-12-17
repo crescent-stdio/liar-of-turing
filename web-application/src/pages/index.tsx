@@ -1,15 +1,22 @@
-import React from "react";
+import React, { useEffect } from "react";
 import useWebSocket from "@/hook/useWebSocket";
 import { getUserUUID } from "@/utils/liarHelper";
 import ChatTimeline from "@/components/ChatTimeline";
 import PlayAndWaitUserList from "@/components/PlayAndWaitUserList";
 import ReadyButton from "@/components/ReadyButton";
 import { useAtom } from "jotai";
-import { isGameStartedAtom, isYourTurnAtom } from "@/store/gameAtom";
+import {
+  isFinishedShowResultAtom,
+  isGameStartedAtom,
+  isYourTurnAtom,
+} from "@/store/gameAtom";
 import ShowGameStatus from "@/components/ShowGameStatus";
-import { userAtom } from "@/store/chatAtom";
+import { messageLogListAtom, userAtom } from "@/store/chatAtom";
 import FinishedRoundModal from "@/components/game/FinishedRoundModal";
 import InputModal from "@/components/game/InputModal";
+import { RESULT_OPEN_TIME } from "@/store/gameStore";
+import { WsJsonRequest } from "@/types/wsTypes";
+import { initialUserSelection } from "@/store/chatStore";
 
 export default function Page() {
   const { isConnected, messageLogList, handleWebSocketMessageSend } =
@@ -17,6 +24,32 @@ export default function Page() {
   const [user, setUser] = useAtom(userAtom);
   const [isGameStarted] = useAtom(isGameStartedAtom);
   const [isYourTurn] = useAtom(isYourTurnAtom);
+  const [isFinishedShowResult, setIsFinishedShowResult] = useAtom(
+    isFinishedShowResultAtom
+  );
+  const [, setMessageLogList] = useAtom(messageLogListAtom);
+
+  useEffect(() => {
+    if (!isFinishedShowResult) return;
+    console.log("isFinishedShowResult", isFinishedShowResult);
+    const timer = setTimeout(() => {
+      const jsonData: WsJsonRequest = {
+        action: "restart_game",
+        user: user,
+        timestamp: Date.now(),
+        max_player: 0,
+        message: "",
+        game_round: 0,
+        game_turns_left: 0,
+        game_round_num: 0,
+        game_turn_num: 0,
+        user_selection: initialUserSelection,
+      };
+      handleWebSocketMessageSend(jsonData);
+      setIsFinishedShowResult(false);
+    }, RESULT_OPEN_TIME);
+    return () => clearTimeout(timer);
+  }, [isFinishedShowResult]);
 
   if (!isConnected) return <div>Connecting...</div>;
   // console.log(user);

@@ -115,9 +115,9 @@ func HandleRestartGameEvent(userManager *services.UserManager, webSocketService 
 	GPTUsers := userManager.GetGPTUsers()
 
 	// Reset Game Status
-	gameState.SetIfGameTotallyReset(userManager)
 
 	// Set all users as watchers
+	gameState.SetIfGameTotallyReset(userManager)
 	userManager.SetAllUsersAsWatchers()
 	for _, gpt := range GPTUsers {
 		gpt.PlayerType = "watcher"

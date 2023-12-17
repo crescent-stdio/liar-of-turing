@@ -267,14 +267,17 @@ func (gs *GameState) SetIfResetRound(userManager *UserManager) {
 }
 
 func (gs *GameState) SetIfGameTotallyReset(userManager *UserManager) {
-	gs.mutex.Lock()
-	defer gs.mutex.Unlock()
 	gs.Status.IsStarted = false
 	gs.Status.IsOver = false
 	gs.Status.InfoIdx = 0
 	gs.Status.IsUsersVoting = false
 
+	// Reset Game Info
 	gs.Info = make([]models.Game, 0)
+
+	// Reset GPTEntryNums & GPTReadyNums
+	gs.SetGPTEntryNums()
+	gs.SetGPTReadyNums()
 
 	// Reset Players & Sort Players
 	userManager.ResetPlayers()
