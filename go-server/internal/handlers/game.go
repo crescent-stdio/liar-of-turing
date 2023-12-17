@@ -37,7 +37,8 @@ func HandleAISelection(gameState *services.GameState, e models.WsPayload) {
 	}
 	gameState.AddUserSelection(selection)
 }
-func ProcessNextTurn(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, timestamp int64) {
+func ProcessNextTurn(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	// , timestamp int64) {
 	if !gameState.CheckAllUserReady(userManager) {
 		return
 	}
@@ -66,13 +67,15 @@ func ProcessNextTurn(userManager *services.UserManager, webSocketService *servic
 		}
 	}
 
-	message := utils.CreateMessageFromUser(userManager, adminUser, timestamp)
+	// message := utils.CreateMessageFromUser(userManager, adminUser, timestamp)
+	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
 	message.Message = fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName)
-	message.MessageType = "alert"
+	message.MessageType = "info"
 
-	response := utils.CreateResponseUsingTimestamp(userManager, gameState, timestamp)
+	// response := utils.CreateResponseUsingTimestamp(userManager, gameState, timestamp)
+	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.Action = "your_turn"
-	response.MessageType = "alert"
+	response.MessageType = "info"
 	response.Message = message.Message
 	response.User = nextUser
 

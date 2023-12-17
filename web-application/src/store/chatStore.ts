@@ -1,10 +1,9 @@
 import { Message, User } from "@/types/playerTypes";
-import { UserSelection } from "@/types/wsTypes";
+import { UserSelection, WsJsonRequest } from "@/types/wsTypes";
 
 // export const
 export const initialMessage: Message = {
   timestamp: 0,
-  message_id: 0,
   user: {
     uuid: "",
     user_id: 0,
@@ -29,6 +28,7 @@ export const adminUser: User = {
 };
 
 export const initialUserSelection: UserSelection = {
+  timestamp: 0,
   user: {
     uuid: "",
     user_id: 0,
@@ -40,4 +40,25 @@ export const initialUserSelection: UserSelection = {
   },
   selection: "",
   reason: "",
+};
+
+export const initialWsJsonRequest: WsJsonRequest = {
+  max_player: 0,
+  action: "",
+  user: {
+    uuid: "",
+    user_id: 0,
+    nickname_id: 0,
+    username: "",
+    role: "",
+    is_online: false,
+    player_type: "",
+  },
+  timestamp: 0,
+  message: "",
+  game_turns_left: 0,
+  game_round: 0,
+  game_turn_num: 0,
+  game_round_num: 0,
+  user_selection: initialUserSelection,
 };

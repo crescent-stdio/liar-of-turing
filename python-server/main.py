@@ -28,9 +28,10 @@ def get_message_from_GPT(messageRequest: MessageData):
         {"role": "user", "content": chatlog}])
         
     answer = completion.choices[0].message.content
-    answer = answer.split(':')[1].lstrip()
+    if len(answer.split(':')) > 1:
+        answer = answer.split(':')[1].lstrip()
     print("result_message: ", answer)
-    return {"user_UUID": messageRequest.user_UUID, "message": answer}
+    return {"user_name": messageRequest.user_name, "message": answer}
 
 #     return completion.choices[0].message.content
 

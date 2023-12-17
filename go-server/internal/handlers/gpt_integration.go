@@ -59,7 +59,7 @@ func ForwardMessageToGPTAPI(GPTUser common.User, message string) models.MessageD
 	FastAPIURL := common.GetFastAPIURL()
 	url := FastAPIURL + "/useGPT"
 	msgData := models.MessageData{
-		UserUUID: GPTUser.UUID,
+		UserName: GPTUser.UserName,
 		Message:  message,
 	}
 	// msgData := map[string]string{"message": message}
@@ -123,7 +123,7 @@ func ProcessGPTSendMessage(userManager *services.UserManager, webSocketService *
 	response.User = GPTUser
 	broadcastToAll(clients, response)
 
-	ProcessNextTurn(userManager, webSocketService, gameState, message.Timestamp)
+	ProcessNextTurn(userManager, webSocketService, gameState) //, message.Timestamp)
 }
 
 func CreateMessagesFromGameStatus(gameInfo []models.Game) []models.Message {

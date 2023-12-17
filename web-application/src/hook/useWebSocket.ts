@@ -1,5 +1,4 @@
 import {
-  chatAtom,
   chatLogAtom,
   messageLogListAtom,
   playerListAtom,
@@ -8,7 +7,6 @@ import {
   userAtom,
   userListAtom,
 } from "@/store/chatAtom";
-import { initialMessage } from "@/store/chatStore";
 import {
   gameRoundAtom,
   gameTurnsLeftAtom,
@@ -22,14 +20,12 @@ import {
 } from "@/store/gameAtom";
 import { Message, User } from "@/types/playerTypes";
 import { WsJsonRequest, WsJsonResponse } from "@/types/wsTypes";
-import { getUserUUID } from "@/utils/liarHelper";
 import {
   sendEnterHumanByUUID,
   sendEnterHumanByUserData,
   sendLeftUser,
 } from "@/utils/wsHelper";
-import { atom, useAtom, useAtomValue } from "jotai";
-import { useResetAtom } from "jotai/utils";
+import { useAtom } from "jotai";
 import { useState, useEffect, useCallback } from "react";
 
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "";
@@ -139,7 +135,6 @@ export default function useWebSocket(
           if (!data.message_log_list) return [];
           const messageLog: Message = {
             timestamp: data.timestamp,
-            message_id: data.message_id,
             user: data.user,
             message: data.message,
             message_type: data.message_type,
@@ -218,6 +213,8 @@ export default function useWebSocket(
     }
 
     if (userUUID) {
+      console.log("userUUID", userUUID);
+      console.log("data.online_user_list", data.online_user_list);
       const myUser = data.online_user_list.find(
         (user: User) => user.uuid === userUUID
       );

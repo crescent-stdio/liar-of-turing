@@ -72,7 +72,8 @@ func (gs *GameState) SetGPTReadyNums() {
 
 	// Select the first gptNum numbers from the shuffled slice.
 	GPTReadyNums := make([]int, global.GPTNum)
-	// copy(GPTReadyNums, possibleNums[:global.GPTNum])
+	// while items of GPTEntryNums not 0, set global.GPTNum
+
 	for _, v := range possibleNums {
 		for idx, w := range GPTEntryNums {
 			if v > w && GPTReadyNums[idx] == 0 {
@@ -81,9 +82,14 @@ func (gs *GameState) SetGPTReadyNums() {
 			}
 		}
 	}
+	for idx, GPTReadyNum := range GPTReadyNums {
+		GPTEntryNum := GPTEntryNums[idx]
+		if GPTEntryNum > GPTReadyNum {
+			GPTReadyNums[idx] = common.Max(global.GPTNum, GPTEntryNum+1)
+		}
+	}
 
 	gs.GPTReadyNums = GPTReadyNums
-
 }
 
 // GetGPTReadyNums: Get GPTReadyNums
@@ -366,13 +372,11 @@ func (gs *GameState) SetMaxPlayer(maxPlayer int) {
 func (gs *GameState) CheckAllUserReady(userManager *UserManager) bool {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
-	log.Println("CheckAllUserReady")
-	humanPlayerNum := gs.GetHumanPlayerNum(userManager)
-	log.Println("humanPlayerNum", humanPlayerNum)
+	totalPlayerNum := len(userManager.GetSortedPlayers())
 	if len(gs.Info) == 0 {
-		return humanPlayerNum == gs.Status.MaxPlayer
+		return totalPlayerNum == gs.Status.MaxPlayer
 	}
-	return humanPlayerNum == gs.Info[gs.Status.InfoIdx].MaxPlayer
+	return totalPlayerNum == gs.Info[gs.Status.InfoIdx].MaxPlayer
 }
 
 // CheckIsGameOver: Check if game is over
@@ -383,13 +387,23 @@ func (gs *GameState) CheckIsGameOver() bool {
 }
 
 func (gs *GameState) GetHumanPlayerNum(userManager *UserManager) int {
-	log.Println("GetHumanPlayerNum")
 	humanPlayerNum := 0
-	log.Println("userManager.GetSortedPlayers()", userManager.GetSortedPlayers())
 	for _, v := range userManager.GetSortedPlayers() {
 		if v.Role == "human" {
 			humanPlayerNum++
 		}
 	}
 	return humanPlayerNum
+}
+
+// CheckAllHumanPlayerReady: Check if all human player ready
+func (gs *GameState) CheckAllHumanPlayerReady(userManager *UserManager) bool {
+	log.Println("CheckAllHumanPlayerReady")
+	humanPlayerNum := gs.GetHumanPlayerNum(userManager)
+	log.Println("humanPlayerNum", humanPlayerNum)
+	GPTNum := len(userManager.GetGPTUsers())
+	if len(gs.Info) == 0 {
+		return humanPlayerNum == gs.Status.MaxPlayer-GPTNum
+	}
+	return humanPlayerNum == gs.Info[gs.Status.InfoIdx].MaxPlayer-GPTNum
 }

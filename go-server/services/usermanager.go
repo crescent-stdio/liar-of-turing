@@ -172,7 +172,7 @@ func GenerateGPTUser(id int) common.User {
 		UserId:     int64(id),
 		UserName:   "",
 		NicknameId: 999,
-		Role:       "player",
+		Role:       "gpt",
 		IsOnline:   false,
 		PlayerType: "watcher",
 	}
@@ -186,7 +186,7 @@ func (um *UserManager) SetGPTUser(index int, user common.User) {
 	um.gptUsers[index] = user
 }
 
-// SetPlayersByUUID: Set players by User data
+// SetPlayersByUser: Set players by User data
 func (um *UserManager) SetPlayersByUser(user common.User) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
@@ -196,6 +196,13 @@ func (um *UserManager) SetPlayersByUser(user common.User) {
 			break
 		}
 	}
+}
+
+// SetPlayerByUser(): Set player by user
+func (um *UserManager) SetPlayerByUser(user common.User) {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	um.Players[user.UUID] = user
 }
 
 // SetAllUsersAsWatchers: Set all users as watchers
@@ -210,8 +217,7 @@ func (um *UserManager) SetAllUsersAsWatchers() {
 
 // ShuffleSortedUsersRandomly: Shuffle users randomly
 func (um *UserManager) SetRandomlyShuffledPlayers(webSocketService *WebSocketService, gameState *GameState) {
-	um.mutex.Lock()
-	defer um.mutex.Unlock()
+
 	seed := time.Now().UnixNano()
 	src := rand.NewSource(seed)
 	rand := rand.New(src)
@@ -223,14 +229,15 @@ func (um *UserManager) SetRandomlyShuffledPlayers(webSocketService *WebSocketSer
 	rand.Shuffle(len(users), func(i, j int) { users[i], users[j] = users[j], users[i] })
 	gameState.SetGPTReadyNums()
 	GPTReadyNums := gameState.GetGPTReadyNums()
+	log.Println("GPTReadyNums:", GPTReadyNums)
 	// Swap each GPTUser with the user at the corresponding position in GPTReadyNums.
 	for index, gptUser := range GPTUsers {
-		readyIndex := GPTReadyNums[index]
+		readyIndex := GPTReadyNums[index] - 1
 
 		// Iterate through the users to find the one matching the current GPTUser.
 		for i, user := range users {
 			if user.UUID == gptUser.UUID {
-				// Swap the found user with the one at readyIndex position.
+				// Swap the found us다er with the one at readyIndex position.
 				users[i], users[readyIndex] = users[readyIndex], users[i]
 				break
 			}
@@ -238,22 +245,32 @@ func (um *UserManager) SetRandomlyShuffledPlayers(webSocketService *WebSocketSer
 	}
 
 	// Set Random UserName and NicknameId and If user is GPTUser, set user to GPTUser
+	um.ResetNicknameUsed()
 	for _, user := range users {
 		nicknameId, userName := um.GenerateRandomUsername()
 		user.UserName = userName
 		user.NicknameId = nicknameId
-		webSocketService.SetClientsByUserUUID(user)
-		um.AddPlayerByUser(user)
+		um.SetPlayerByUser(user)
+		um.SetSortedPlayerByUser(user)
 
+		isGPTUser := false
 		for j, gpt := range GPTUsers {
 			if gpt.UUID == user.UUID {
+				isGPTUser = true
 				um.SetGPTUser(j, user)
 				break
 			}
 		}
+		if !isGPTUser {
+			webSocketService.SetClientsByUserUUID(user)
+		}
 
 	}
-	um.SetSortedPlayers(users)
+	log.Println("users:", users)
+	// log.Println("players:", um.GetPlayers()
+	for _, v := range um.GetSortedPlayers() {
+		log.Println("olayers:", v)
+	}
 }
 
 func (um *UserManager) ExcludePlayersFromSelections(webSocketService *WebSocketService, gameState *GameState) (vote int, eliminatedPlayer common.User, remainingPlayerList []common.User) {
@@ -302,6 +319,15 @@ func (um *UserManager) GetNicknames() []common.Nickname {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
 	return um.Nicknames
+}
+
+// ResetNicknameUsed: Reset nickname used
+func (um *UserManager) ResetNicknameUsed() {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+	for i := range um.Nicknames {
+		um.Nicknames[i].IsUsed = false
+	}
 }
 
 // random suffle nicknames and return not used nickname
@@ -392,16 +418,30 @@ func (um *UserManager) GetPlayerByUUID(uuid string) (common.User, bool) {
 	return player, exists
 }
 
-// AddSortedPlayer
-func (um *UserManager) AddSortedPlayer(player common.User) {
+// AddSortedPlayerByUser
+func (um *UserManager) AddSortedPlayerByUser(player common.User) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
 
 	um.SortedPlayers = append(um.SortedPlayers, player)
 }
 
+// SetSortedPlayers: Set sorted players
 func (um *UserManager) SetSortedPlayers(players []common.User) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
 	um.SortedPlayers = players
+}
+
+// SetSortedPlayerByUser
+func (um *UserManager) SetSortedPlayerByUser(player common.User) {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+
+	for i, v := range um.SortedPlayers {
+		if v.UUID == player.UUID {
+			um.SortedPlayers[i] = player
+			break
+		}
+	}
 }

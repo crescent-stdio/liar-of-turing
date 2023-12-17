@@ -119,6 +119,11 @@ func HandleRestartGameEvent(userManager *services.UserManager, webSocketService 
 	message.Message = "게임이 초기화되었습니다."
 	message.MessageType = "alert"
 
+	// Reset Messages
+	userManager.AddPrevMessagesFromMessages()
+	userManager.ClearMessages()
+	userManager.AddMessage(message)
+
 	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
 	response.Action = "restart_game"
 	response.Message = message.Message
@@ -126,8 +131,4 @@ func HandleRestartGameEvent(userManager *services.UserManager, webSocketService 
 	response.User = message.User
 	broadcastToAll(clients, response)
 
-	// Reset Messages
-	userManager.AddPrevMessagesFromMessages()
-	userManager.ClearMessages()
-	userManager.AddMessage(message)
 }

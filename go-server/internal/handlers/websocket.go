@@ -58,17 +58,20 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 	GPTUsers := userManager.GetGPTUsers()
 
 	for {
+
 		e := <-webSocketService.Broadcast
 
 		// Consolidated logging
 		log.Printf("Action: %s, User: %v\n", e.Action, e.User)
 
 		switch e.Action {
-		case "broadcast", "new_message_admin", "new_message":
+		case "broadcast", "new_message_admin":
 			BroadcastWebSocketMessage(userManager, webSocketService, gameState, e)
 
-		// case "new_message":
-		// 	HandleNewWebSocketMessage(userManager, webSocketService, gameState, e)
+		case "new_message":
+			BroadcastWebSocketMessage(userManager, webSocketService, gameState, e)
+			gameState.SetNextTurnInfo()
+			// ProcessNextTurn(userManager, webSocketService, gameState) //, e.Timestamp)
 		case "enter_human":
 			HandleHumanUserEntry(userManager, webSocketService, gameState, e)
 			// broadcastToAll(clients, response)
@@ -159,16 +162,17 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 			message.Message = fmt.Sprintf("%d라운드가 초기화되었습니다.", gameRound)
 			message.MessageType = "alert"
 
+			userManager.AddPrevMessagesFromMessages()
+			userManager.ClearMessages()
+			userManager.AddMessage(message)
+
 			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
 			response.Action = "restart_round"
 			response.Message = message.Message
 			response.MessageType = "alert"
 			response.User = adminUser
-
 			broadcastToAll(clients, response)
-			userManager.AddPrevMessagesFromMessages()
-			userManager.ClearMessages()
-			userManager.AddMessage(message)
+
 		case "get_game_Info":
 			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
 			response.Action = "get_game_Info"
@@ -186,15 +190,14 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 		log.Println("ProcessGPTReady")
 		ProcessGPTReady(userManager, webSocketService, gameState)
 		log.Println("ProcessAllPlayersReady")
+		HandleAllHumanUserReady(userManager, webSocketService, gameState)
 		ProcessAllPlayersReady(userManager, webSocketService, gameState)
 		log.Println("ProcessAllPlayersVoted")
-		ProcessNextTurn(userManager, webSocketService, gameState, e.Timestamp)
+		ProcessNextTurn(userManager, webSocketService, gameState) //, e.Timestamp)
 		log.Println("ProcessAllPlayersVoted")
 		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
-		// next game or next round
 		log.Println("HandleRoundIsOver")
-		HandleRoundIsOver(userManager, webSocketService, gameState, e)
-
+		HandleRoundIsOver(userManager, webSocketService, gameState)
 		log.Println("GPTEnterNums:", gameState.GetGPTEntryNums())
 		log.Println("GPTReadyNums:", gameState.GetGPTReadyNums())
 		log.Println("=================================================")
@@ -214,7 +217,7 @@ func HandleUserReady(userManager *services.UserManager, webSocketService *servic
 	}
 	nowUser.PlayerType = "player"
 	userManager.AddPlayerByUser(nowUser)
-	userManager.AddSortedPlayer(nowUser)
+	userManager.AddSortedPlayerByUser(nowUser)
 	webSocketService.AddClient(e.Conn, nowUser)
 
 	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
@@ -234,15 +237,24 @@ func HandleUserReady(userManager *services.UserManager, webSocketService *servic
 func BroadcastWebSocketMessage(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, e models.WsPayload) {
 	clients := webSocketService.GetClients()
 	message := utils.CreateMessageFromUser(userManager, e.User, e.Timestamp)
+	message.Message = e.Message
+	message.MessageType = "message"
 	userManager.AddMessage(message)
+	log.Println(userManager.GetMessages())
 	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+	response.Action = "new_message"
+	response.Message = message.Message
+	response.User = e.User
+
 	broadcastToAll(clients, response)
 }
 
 func ProcessAllPlayersReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
-	if !gameState.CheckAllUserReady(userManager) {
+	isGameStarted := gameState.GetStatus().IsStarted
+	if !gameState.CheckAllUserReady(userManager) || isGameStarted {
 		return
 	}
+	log.Println("ProcessAllPlayersReady is called")
 	userManager.SetRandomlyShuffledPlayers(webSocketService, gameState)
 	gameState.InitializeRoundInfo(userManager, webSocketService)
 
@@ -250,17 +262,18 @@ func ProcessAllPlayersReady(userManager *services.UserManager, webSocketService 
 	adminUser := userManager.GetAdminUser()
 
 	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.User = adminUser
 	message.MessageType = "alert"
 	message.Message = "게임이 시작되었습니다."
+
+	userManager.AddPrevMessagesFromMessages()
+	userManager.ClearMessages()
+	userManager.AddMessage(message)
 
 	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.MessageType = "alert"
 	response.Message = message.Message
 	broadcastToAll(clients, response)
-
-	userManager.AddPrevMessagesFromMessages()
-	userManager.ClearMessages()
-	userManager.AddMessage(message)
 
 	// HandleRoundIsOver(e.Timestamp)
 }
@@ -273,8 +286,8 @@ func ProcessGPTEntering(userManager *services.UserManager, webSocketService *ser
 	for idx, GPTEntryNum := range GPTEntryNums {
 		GPTUser := GPTUsers[idx]
 		// If GPT's Entring time cames...(GPTUser isn't ONLINE)
-		if !GPTUser.IsOnline && GPTEntryNum >= OnlineUserNum {
-			time.Sleep(time.Second * 1)
+		if !GPTUser.IsOnline && GPTEntryNum <= OnlineUserNum+1 {
+			utils.RandomTimeSleep()
 			HandleGPTEntry(userManager, webSocketService, gameState, idx)
 		}
 	}
@@ -313,15 +326,33 @@ func HandleGPTEntry(userManager *services.UserManager, webSocketService *service
 	broadcastToAll(clients, response)
 }
 func ProcessGPTReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
-	ReadyPlayerNum := len(utils.RetrievePlayerList(userManager))
+	ReadyPlayerNum := len(utils.RetrieveReadyUserList(userManager))
+	log.Println("ReadyPlayerNum:", ReadyPlayerNum)
 
 	GPTUsers := userManager.GetGPTUsers()
 	GPTReadyNums := gameState.GetGPTReadyNums()
 	for idx, GPTReadyNum := range GPTReadyNums {
 		GPTUser := GPTUsers[idx]
 		// If GPT's Ready time cames...(GPTUser isn't WATCHER)
-		if GPTUser.PlayerType == "watcher" && GPTReadyNum >= ReadyPlayerNum {
-			time.Sleep(time.Second * 1)
+		if GPTUser.PlayerType == "watcher" && GPTReadyNum <= ReadyPlayerNum+1 {
+			log.Println("GPTReadyNum:", GPTReadyNum)
+			utils.RandomTimeSleep()
+			HandleGPTReady(userManager, webSocketService, gameState, idx)
+		}
+	}
+}
+func HandleAllHumanUserReady(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	if !gameState.CheckAllHumanPlayerReady(userManager) {
+		return
+	}
+	GPTUsers := userManager.GetGPTUsers()
+	GPTReadyNums := gameState.GetGPTReadyNums()
+	log.Println(GPTUsers)
+	for idx, GPTReadyNum := range GPTReadyNums {
+		GPTUser := GPTUsers[idx]
+		if GPTUser.PlayerType == "watcher" {
+			log.Println("GPTReadyNum:", GPTReadyNum)
+			utils.RandomTimeSleep()
 			HandleGPTReady(userManager, webSocketService, gameState, idx)
 		}
 	}
@@ -336,7 +367,7 @@ func HandleGPTReady(userManager *services.UserManager, webSocketService *service
 	// Set GPT's type to "PLAYER"
 	GPTUser.PlayerType = "player"
 	userManager.AddPlayerByUser(GPTUser)
-	userManager.AddSortedPlayer(GPTUser)
+	userManager.AddSortedPlayerByUser(GPTUser)
 	userManager.SetGPTUser(index, GPTUser)
 
 	// Make Message & Response
@@ -411,7 +442,7 @@ func broadcastSelectionResultToAll(userManager *services.UserManager, webSocketS
 	}
 }
 
-func HandleRoundIsOver(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState, e models.WsPayload) {
+func HandleRoundIsOver(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
 	// Game is not started
 	if !gameState.CheckIsRoundOver() {
 		return

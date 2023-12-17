@@ -15,6 +15,7 @@ type GPTWsPayload struct {
 }
 
 type MessageData struct {
-	UserUUID string `json:"user_UUID"`
+	// UserUUID string `json:"user_UUID"`
+	UserName string `json:"user_name"`
 	Message  string `json:"message"`
 }

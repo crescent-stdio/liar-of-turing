@@ -52,7 +52,7 @@ func broadCastToSomeone(clients map[models.WebSocketConnection]common.User, clie
 // 		MaxPlayer:      MaxPlayer,
 
 // 		OnlineUserList: utils.RetrieveUserList(userManager),
-// 		PlayerList:     utils.RetrievePlayerList(userManager),
+// 		PlayerList:     utils.RetrieveReadyUserList(userManager),
 // 		GameTurnsLeft:  gameTurnsLeft,
 // 		GameRound:      gameRound,
 // 		IsGameStarted:  isGameStarted,
