@@ -160,7 +160,7 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 			gameState.SetIfResetRound(userManager)
 			message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
 			message.Message = fmt.Sprintf("%d라운드가 초기화되었습니다.", gameRound)
-			message.MessageType = "alert"
+			message.MessageType = "info"
 
 			userManager.AddPrevMessagesFromMessages()
 			userManager.ClearMessages()
@@ -169,7 +169,7 @@ func ListenToWebSocketChannel(userManager *services.UserManager, webSocketServic
 			response := utils.CreateResponseUsingPayload(userManager, gameState, e)
 			response.Action = "restart_round"
 			response.Message = message.Message
-			response.MessageType = "alert"
+			response.MessageType = "info"
 			response.User = adminUser
 			broadcastToAll(clients, response)
 
@@ -255,15 +255,17 @@ func ProcessAllPlayersReady(userManager *services.UserManager, webSocketService 
 		return
 	}
 	log.Println("ProcessAllPlayersReady is called")
-	userManager.SetRandomlyShuffledPlayers(webSocketService, gameState)
+	userManager.SetPlayersRandomlyShuffled(webSocketService, gameState)
+	gameState.SetQuestionsRandomly()
 	gameState.InitializeRoundInfo(userManager, webSocketService)
 
 	clients := webSocketService.GetClients()
 	adminUser := userManager.GetAdminUser()
 
+	// Make Message & Response
 	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
 	message.User = adminUser
-	message.MessageType = "alert"
+	message.MessageType = "info"
 	message.Message = "게임이 시작되었습니다."
 
 	userManager.AddPrevMessagesFromMessages()
@@ -271,9 +273,22 @@ func ProcessAllPlayersReady(userManager *services.UserManager, webSocketService 
 	userManager.AddMessage(message)
 
 	response := utils.CreateInitalizeResponse(userManager, gameState)
-	response.MessageType = "alert"
+	response.MessageType = "info"
 	response.Message = message.Message
 	broadcastToAll(clients, response)
+
+	// Broadcast Question to all
+	question := gameState.GetQuestion()
+	QMessage := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	QMessage.User = adminUser
+	QMessage.MessageType = "alert"
+	QMessage.Message = fmt.Sprintf("조건: '%s'", question)
+	userManager.AddMessage(QMessage)
+
+	QResponse := utils.CreateInitalizeResponse(userManager, gameState)
+	QResponse.MessageType = "alert"
+	QResponse.Message = QMessage.Message
+	broadcastToAll(clients, QResponse)
 
 	// HandleRoundIsOver(e.Timestamp)
 }
@@ -400,12 +415,12 @@ func ProcessAllPlayersVoted(userManager *services.UserManager, webSocketService 
 	userManager.SetSortedPlayers(remainingPlayerList)
 
 	messages := utils.CreateMessageWithAutoTimestamp(userManager, AdmminUser)
-	messages.MessageType = "alert"
+	messages.MessageType = "info"
 	messages.Message = fmt.Sprintf("%d라운드가 종료되었습니다. 탈락자는 %d표를 받은 [%s]입니다.", gameRound, voteNum, eliminatedPlayer.UserName)
 
 	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.Action = ""
-	response.MessageType = "alert"
+	response.MessageType = "info"
 	response.Message = messages.Message
 
 	broadcastToAll(clients, response)
@@ -429,11 +444,11 @@ func broadcastSelectionResultToAll(userManager *services.UserManager, webSocketS
 		Timestamp := userSelection.Timestamp
 		message := utils.CreateMessageFromUser(userManager, VotedUser, Timestamp)
 		message.Message = fmt.Sprintf("%s님이 [%s]에게 투표했습니다. 사유: %s", VotedUser.UserName, Selection, Reason)
-		message.MessageType = "alert"
+		message.MessageType = "info"
 
 		response := utils.CreateResponseUsingTimestamp(userManager, gameState, Timestamp)
 		response.Action = "new_message_admin"
-		response.MessageType = "alert"
+		response.MessageType = "info"
 		response.Message = message.Message
 		response.User = VotedUser
 
@@ -447,7 +462,7 @@ func HandleRoundIsOver(userManager *services.UserManager, webSocketService *serv
 	if !gameState.CheckIsRoundOver() {
 		return
 	}
-
+	gameState.SetIfRoundIsOver()
 	if !gameState.CheckIsGameOver() {
 		HandleGameOverEvent(userManager, webSocketService, gameState)
 	} else {
@@ -456,18 +471,19 @@ func HandleRoundIsOver(userManager *services.UserManager, webSocketService *serv
 }
 
 func HandleRoundOverEvent(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	adminUser := userManager.GetAdminUser()
 	gameRound := gameState.GetNowGameInfo().Round
 	gameState.SetIfResetRound(userManager)
-	message := utils.CreateMessageWithAutoTimestamp(userManager, userManager.GetAdminUser())
-	message.MessageType = "alert"
+	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.MessageType = "info"
 	message.Message = fmt.Sprintf("%d라운드가 종료되었습니다.", gameRound)
 	userManager.AddMessage(message)
 
 	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.Action = "restart_round"
-	response.MessageType = "alert"
+	response.MessageType = "info"
 	response.Message = message.Message
-	response.User = userManager.GetAdminUser()
+	response.User = adminUser
 
 	clients := webSocketService.GetClients()
 	broadcastToAll(clients, response)

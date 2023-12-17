@@ -43,6 +43,7 @@ func ProcessNextTurn(userManager *services.UserManager, webSocketService *servic
 		return
 	}
 	if gameState.CheckIsRoundOver() {
+		gameState.SetIfRoundIsOver()
 		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
 		return
 	}
@@ -77,7 +78,7 @@ func ProcessNextTurn(userManager *services.UserManager, webSocketService *servic
 	response.Action = "your_turn"
 	response.MessageType = "info"
 	response.Message = message.Message
-	response.User = nextUser
+	response.User = adminUser
 
 	nextConn, exists := webSocketService.RetrieveClientByUUID(nextUser.UUID)
 	if !exists {
@@ -95,7 +96,7 @@ func HandleGameOverEvent(userManager *services.UserManager, webSocketService *se
 	adminUser := userManager.GetAdminUser()
 	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
 	message.Message = "게임이 종료되었습니다. 10초 후에 자동으로 재시작됩니다."
-	message.MessageType = "alert"
+	message.MessageType = "info"
 
 	response := utils.CreateInitalizeResponse(userManager, gameState)
 	response.Action = "game_over"

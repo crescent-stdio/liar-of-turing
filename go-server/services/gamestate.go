@@ -25,12 +25,14 @@ type GameState struct {
 	Info         []models.Game
 	GPTEntryNums []int
 	GPTReadyNums []int
+	questions    []string
 }
 
 func NewGameState() *GameState {
 	gameTurnNum := global.GetGameTurnNum()
 	gameRoundNum := global.GetGameRoundNum()
 	gameMaxPlayer := global.GetMaxPlayer()
+	questions := common.GetQuestions()
 	gameStatus := GameStatus{
 		IsStarted: false,
 		IsOver:    false,
@@ -46,6 +48,7 @@ func NewGameState() *GameState {
 		Info:         make([]models.Game, 0),
 		GPTEntryNums: make([]int, 0),
 		GPTReadyNums: make([]int, 0),
+		questions:    questions,
 	}
 }
 
@@ -61,7 +64,7 @@ func (gs *GameState) SetGPTReadyNums() {
 	GPTEntryNums := gs.GPTEntryNums
 	// Create a slice with all possible numbers in the range [1, maxPlayer).
 	possibleNums := make([]int, 0)
-	for i := 2; i <= global.MaxPlayer; i++ {
+	for i := 1; i <= global.MaxPlayer; i++ {
 		possibleNums = append(possibleNums, i)
 	}
 
@@ -85,7 +88,7 @@ func (gs *GameState) SetGPTReadyNums() {
 	for idx, GPTReadyNum := range GPTReadyNums {
 		GPTEntryNum := GPTEntryNums[idx]
 		if GPTEntryNum > GPTReadyNum {
-			GPTReadyNums[idx] = common.Max(global.GPTNum, GPTEntryNum+1)
+			GPTReadyNums[idx] = common.Min(global.GPTNum, GPTEntryNum+1)
 		}
 	}
 
@@ -110,7 +113,7 @@ func (gs *GameState) SetGPTEntryNums() {
 
 	// Create a slice with all possible numbers in the range [1, maxPlayer-1).
 	possibleNums := make([]int, 0)
-	for i := 1; i < global.MaxPlayer; i++ {
+	for i := 0; i <= global.MaxPlayer; i++ {
 		possibleNums = append(possibleNums, i)
 	}
 
@@ -137,6 +140,28 @@ func (gs *GameState) GetAllGameInfo() []models.Game {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
 	return gs.Info
+}
+
+// SetQuestionsRandomly: Set questions randomly
+func (gs *GameState) SetQuestionsRandomly() {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+	seed := time.Now().UnixNano()
+	src := rand.NewSource(seed)
+	rand := rand.New(src)
+
+	questions := gs.questions
+	rand.Shuffle(len(questions), func(i, j int) {
+		questions[i], questions[j] = questions[j], questions[i]
+	})
+	gs.questions = questions
+}
+
+// GetQuestion
+func (gs *GameState) GetQuestion() string {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+	return gs.questions[0]
 }
 
 func (gs *GameState) SearchUserInUserSelections(idx int, user common.User) (models.UserSelection, bool) {
@@ -224,6 +249,10 @@ func (gs *GameState) SetIfRoundIsOver() {
 	defer gs.mutex.Unlock()
 	gs.Status.IsStarted = false
 	gs.Status.IsOver = true
+	if len(gs.Info) == 0 {
+		return
+	}
+	gs.Info[gs.Status.InfoIdx].TurnsLeft = 0
 }
 
 func (gs *GameState) SetIfResetRound(userManager *UserManager) {
@@ -348,6 +377,7 @@ func (gs *GameState) CheckIsRoundOver() bool {
 	if len(gs.Info) == 0 {
 		return false
 	}
+	log.Println("gs.Info[gs.Status.InfoIdx].TurnsLeft", gs.Info[gs.Status.InfoIdx].TurnsLeft)
 	return gs.Info[gs.Status.InfoIdx].TurnsLeft == 0
 }
 

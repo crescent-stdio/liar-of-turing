@@ -11,6 +11,7 @@ import (
 	"liar-of-turing/utils"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -100,8 +101,20 @@ func ProcessGPTSendMessage(userManager *services.UserManager, webSocketService *
 	messages := userManager.GetMessages()
 
 	MessageLogString := ""
+
+	// Add Players
+	players := userManager.GetSortedPlayers()
+	MessageLogString += "[단체 대화방 참여자]: "
+	for _, v := range players {
+		MessageLogString += fmt.Sprintf("%s, ", v.UserName)
+	}
+	MessageLogString += "\n"
+
 	for _, v := range messages {
-		if v.User.UserName != "admin" {
+		if v.User.UserName == "server" && v.MessageType == "alert" {
+			question := strings.Split(strings.Split(v.Message, "'")[1], "'")[0]
+			MessageLogString += fmt.Sprintf("[주제]: %s\n", question)
+		} else if v.User.UserName != "server" {
 			MessageLogString += fmt.Sprintf("%s: %s\n", v.User.UserName, v.Message)
 		}
 	}

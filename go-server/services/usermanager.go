@@ -216,7 +216,7 @@ func (um *UserManager) SetAllUsersAsWatchers() {
 }
 
 // ShuffleSortedUsersRandomly: Shuffle users randomly
-func (um *UserManager) SetRandomlyShuffledPlayers(webSocketService *WebSocketService, gameState *GameState) {
+func (um *UserManager) SetPlayersRandomlyShuffled(webSocketService *WebSocketService, gameState *GameState) {
 
 	seed := time.Now().UnixNano()
 	src := rand.NewSource(seed)
@@ -422,7 +422,12 @@ func (um *UserManager) GetPlayerByUUID(uuid string) (common.User, bool) {
 func (um *UserManager) AddSortedPlayerByUser(player common.User) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
-
+	// if User is in SortedPlayers, remove it
+	for _, v := range um.SortedPlayers {
+		if v.UUID == player.UUID {
+			return
+		}
+	}
 	um.SortedPlayers = append(um.SortedPlayers, player)
 }
 

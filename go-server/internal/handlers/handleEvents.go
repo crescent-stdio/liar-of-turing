@@ -36,21 +36,25 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 	userManager.AddPlayerByUser(nowUser)
 	webSocketService.AddClient(e.Conn, nowUser)
 
-	// broadcast to all
-	adminUser := userManager.GetAdminUser()
-	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
-	message.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
-	message.MessageType = "system"
+	if isGameStarted {
 
-	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
-	response.Action = "human_info"
-	response.User = adminUser
-	response.MessageType = "system"
-	response.Message = message.Message
-	log.Println("response:", response)
+	} else {
+		// broadcast to all
+		adminUser := userManager.GetAdminUser()
+		message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+		message.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
+		message.MessageType = "system"
 
-	clients = webSocketService.GetClients()
-	broadcastToAll(clients, response)
+		response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+		response.Action = "human_info"
+		response.User = adminUser
+		response.MessageType = "system"
+		response.Message = message.Message
+		log.Println("response:", response)
+
+		clients = webSocketService.GetClients()
+		broadcastToAll(clients, response)
+	}
 
 	// Round is over And enter the web application(previous User was player)
 	if gameState.CheckIsRoundOver() && exists && nowUser.PlayerType == "player" {
@@ -60,12 +64,12 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 		if exists {
 			waitResponse = utils.CreateResponseUsingTimestamp(userManager, gameState, e.Timestamp)
 			waitResponse.Action = "wait_for_players"
-			waitResponse.MessageType = "alert"
+			waitResponse.MessageType = "info"
 			waitResponse.Message = "라운드가 종료되었습니다. 다음 플레이어의 선택을 기다리세요."
 		} else {
 			waitResponse = utils.CreateResponseUsingTimestamp(userManager, gameState, e.Timestamp)
 			waitResponse.Action = "submit_ai"
-			waitResponse.MessageType = "alert"
+			waitResponse.MessageType = "info"
 			waitResponse.Message = "라운드가 종료되었습니다. 다음 라운드를 위해 AI를 선택하세요."
 		}
 		broadCastToSomeone(clients, e.Conn, waitResponse)
@@ -83,11 +87,11 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 			nowUser.PlayerType = "player"
 			someoneMessage := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
 			someoneMessage.Message = fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName)
-			someoneMessage.MessageType = "alert"
+			someoneMessage.MessageType = "info"
 
 			someoneResponse := utils.CreateResponseUsingTimestamp(userManager, gameState, e.Timestamp)
 			someoneResponse.Action = "your_turn"
-			someoneResponse.MessageType = "alert"
+			someoneResponse.MessageType = "info"
 			someoneResponse.Message = someoneMessage.Message
 			someoneResponse.User = adminUser
 
@@ -117,7 +121,7 @@ func HandleRestartGameEvent(userManager *services.UserManager, webSocketService 
 	// Send message about game reset
 	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
 	message.Message = "게임이 초기화되었습니다."
-	message.MessageType = "alert"
+	message.MessageType = "info"
 
 	// Reset Messages
 	userManager.AddPrevMessagesFromMessages()
