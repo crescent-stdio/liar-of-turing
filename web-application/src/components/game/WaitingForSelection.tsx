@@ -1,7 +1,8 @@
+import { SELECTION_OPEN_TIME } from "@/store/gameStore";
 import { useEffect, useState } from "react";
 
 export default function WaitingForSelection() {
-  const [isModalOpen, setIsModalOpen] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   // Toggle modal on click
   const toggleModal = () => {
     setIsModalOpen((prev) => !prev);
@@ -12,8 +13,12 @@ export default function WaitingForSelection() {
 
   // Set up global click listener
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsModalOpen(true);
+    }, SELECTION_OPEN_TIME);
     window.addEventListener("click", toggleModal);
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("click", toggleModal);
     };
   }, []);

@@ -36,31 +36,60 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 	userManager.AddPlayerByUser(nowUser)
 	webSocketService.AddClient(e.Conn, nowUser)
 
-	if isGameStarted {
+	response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+	response.Action = "update_state"
+	broadcastToAll(clients, response)
 
-	} else {
-		// broadcast to all
-		adminUser := userManager.GetAdminUser()
-		message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
-		message.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
-		message.MessageType = "system"
+	// if isGameStarted && !isGameOver {
+	// 	adminUser := userManager.GetAdminUser()
+	// 	nextUser, nextExists := gameState.GetNextTurnPlayer()
 
-		response := utils.CreateResponseUsingPayload(userManager, gameState, e)
-		response.Action = "human_info"
-		response.User = adminUser
-		response.MessageType = "system"
-		response.Message = message.Message
-		log.Println("response:", response)
+	// 	// Send message to next user
+	// 	if nextExists && nextUser.UUID == nowUser.UUID {
+	// 		// nowUser.PlayerType = "player"
+	// 		// someoneMessage := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+	// 		// someoneMessage.Message = fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName)
+	// 		// someoneMessage.MessageType = "info"
 
-		clients = webSocketService.GetClients()
-		broadcastToAll(clients, response)
-	}
+	// 		// someoneResponse := utils.CreateResponseUsingTimestamp(userManager, gameState, e.Timestamp)
+	// 		// someoneResponse.Action = "your_turn"
+	// 		// someoneResponse.MessageType = "info"
+	// 		// someoneResponse.Message = someoneMessage.Message
+	// 		// someoneResponse.User = adminUser
+
+	// 		// nextConn, _ := webSocketService.RetrieveClientByUUID(nextUser.UUID)
+	// 		// broadcastToSomeone(clients, nextConn, someoneResponse)
+	// 	} else {
+	// 		// Send message to now user
+	// 		response := utils.CreateResponseUsingPayload(userManager, gameState, e)
+	// 		response.Action = "update_state"
+	// 		response.User = adminUser
+
+	// 		broadcastToAll(clients, response)
+
+	// 	}
+	// } else {
+	// broadcast to all
+	adminUser := userManager.GetAdminUser()
+	message := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
+	message.Message = fmt.Sprintf("%s님이 입장했습니다.", nowUser.UserName)
+	message.MessageType = "system"
+
+	response = utils.CreateResponseUsingPayload(userManager, gameState, e)
+	response.Action = "human_info"
+	response.User = adminUser
+	response.MessageType = "system"
+	response.Message = message.Message
+	log.Println("response:", response)
+
+	clients = webSocketService.GetClients()
+	broadcastToAll(clients, response)
+	// }
 
 	// Round is over And enter the web application(previous User was player)
 	if gameState.CheckIsRoundOver() && exists && nowUser.PlayerType == "player" {
 		var waitResponse models.WsJsonResponse
-		gameRound := gameState.GetNowGameInfo().Round
-		_, exists := gameState.SearchUserInUserSelections(gameRound-1, nowUser)
+		_, exists := gameState.SearchUserInUserSelections(nowUser)
 		if exists {
 			waitResponse = utils.CreateResponseUsingTimestamp(userManager, gameState, e.Timestamp)
 			waitResponse.Action = "wait_for_players"
@@ -72,32 +101,9 @@ func HandleHumanUserEntry(userManager *services.UserManager, webSocketService *s
 			waitResponse.MessageType = "info"
 			waitResponse.Message = "라운드가 종료되었습니다. 다음 라운드를 위해 AI를 선택하세요."
 		}
-		broadCastToSomeone(clients, e.Conn, waitResponse)
+		broadcastToSomeone(clients, e.Conn, waitResponse)
 
 		return
-	}
-
-	// If game is started, send message to next user
-	if isGameStarted && !isGameOver {
-		adminUser := userManager.GetAdminUser()
-		nextUser, exists := gameState.GetNextTurnPlayer()
-
-		// Send message to next user
-		if exists && nextUser.UUID == e.User.UUID {
-			nowUser.PlayerType = "player"
-			someoneMessage := utils.CreateMessageFromUser(userManager, adminUser, e.Timestamp)
-			someoneMessage.Message = fmt.Sprintf("%s님의 차례입니다.", nextUser.UserName)
-			someoneMessage.MessageType = "info"
-
-			someoneResponse := utils.CreateResponseUsingTimestamp(userManager, gameState, e.Timestamp)
-			someoneResponse.Action = "your_turn"
-			someoneResponse.MessageType = "info"
-			someoneResponse.Message = someoneMessage.Message
-			someoneResponse.User = adminUser
-
-			nextConn, _ := webSocketService.RetrieveClientByUUID(nextUser.UUID)
-			broadCastToSomeone(clients, nextConn, someoneResponse)
-		}
 	}
 
 }

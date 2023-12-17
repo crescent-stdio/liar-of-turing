@@ -3,7 +3,6 @@ package utils
 import (
 	"liar-of-turing/common"
 	"liar-of-turing/services"
-	"log"
 	"sort"
 )
 
@@ -13,7 +12,6 @@ func RetrieveUserList(userManager *services.UserManager) []common.User {
 	var userList []common.User
 	for _, v := range players {
 		if v.UserName != "admin" && v.IsOnline {
-			log.Println("Online User:", v)
 			userList = append(userList, v)
 		}
 	}

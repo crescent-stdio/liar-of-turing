@@ -159,6 +159,17 @@ export default function useWebSocket(
         setGameRoundNum(data.game_round);
         setGameTurnsNum(data.game_turns_left);
         break;
+      case "show_result":
+        console.log("show_result", data);
+        setIsFinishedRound(true);
+        setIsFinishedSubmition(true);
+        setIsYourTurn(false);
+        setMessageLogList(() => {
+          if (!data.message_log_list) return [];
+          return data.message_log_list;
+        });
+        setPlayerList(data.player_list);
+        break;
       case "round_start":
         setIsGameStarted(true);
         setIsFinishedRound(false);
@@ -230,8 +241,7 @@ export default function useWebSocket(
     if (data.player_list && data.player_list.length >= 0)
       setPlayerList(data.player_list);
     if (data.is_game_started) setIsGameStarted(data.is_game_started);
-    // }, []);
-  }, []); // Add other dependencies as needed
+  }, []);
 
   // Function to send WebSocket messages
   const handleWebSocketMessageSend = useCallback(

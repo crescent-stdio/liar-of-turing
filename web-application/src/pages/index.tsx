@@ -1,26 +1,14 @@
 import React from "react";
-import MessageInput from "@/components/MessageInput";
 import useWebSocket from "@/hook/useWebSocket";
 import { getUserUUID } from "@/utils/liarHelper";
 import ChatTimeline from "@/components/ChatTimeline";
 import PlayAndWaitUserList from "@/components/PlayAndWaitUserList";
 import ReadyButton from "@/components/ReadyButton";
-import { useAtom, useAtomValue } from "jotai";
-import {
-  isFinishedRoundAtom,
-  isFinishedSubmitionAtom,
-  isGameStartedAtom,
-  isUserJoinGameAtom,
-  isYourTurnAtom,
-} from "@/store/gameAtom";
-import VerticalLine from "@/components/Line/VerticalLine";
-import HorizontalLine from "@/components/Line/HorizontalLine";
+import { useAtom } from "jotai";
+import { isGameStartedAtom, isYourTurnAtom } from "@/store/gameAtom";
 import ShowGameStatus from "@/components/ShowGameStatus";
-import ChooseAIInput from "@/components/game/ChooseAIInput";
-import WaitingForSelection from "@/components/game/WaitingForSelection";
-import { playerListAtom, userAtom } from "@/store/chatAtom";
+import { userAtom } from "@/store/chatAtom";
 import FinishedRoundModal from "@/components/game/FinishedRoundModal";
-import InputComponent from "@/components/game/InputModal";
 import InputModal from "@/components/game/InputModal";
 
 export default function Page() {

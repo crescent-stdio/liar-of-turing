@@ -14,7 +14,8 @@ def get_message_from_GPT(messageRequest: MessageData):
     chatlog = messageRequest.message
 
     completion = client.chat.completions.create(
-    model="gpt-4",
+    # model="gpt-4",
+    model="gpt-3.5-turbo",
     messages=[
         {"role": "system", "content": '''
         문제: 단체 채팅방의 참여자로서 다음에 이어질 문장은 무엇인가? 모든 조건을 반드시 만족하도록 할 것.

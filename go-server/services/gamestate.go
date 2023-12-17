@@ -11,12 +11,13 @@ import (
 )
 
 type GameStatus struct {
-	IsStarted bool
-	IsOver    bool
-	TurnsNum  int
-	RoundNum  int
-	MaxPlayer int
-	InfoIdx   int
+	IsStarted     bool
+	IsOver        bool
+	TurnsNum      int
+	RoundNum      int
+	MaxPlayer     int
+	InfoIdx       int
+	IsUsersVoting bool
 }
 
 type GameState struct {
@@ -34,12 +35,13 @@ func NewGameState() *GameState {
 	gameMaxPlayer := global.GetMaxPlayer()
 	questions := common.GetQuestions()
 	gameStatus := GameStatus{
-		IsStarted: false,
-		IsOver:    false,
-		TurnsNum:  gameTurnNum,
-		RoundNum:  gameRoundNum,
-		MaxPlayer: gameMaxPlayer,
-		InfoIdx:   0,
+		IsStarted:     false,
+		IsOver:        false,
+		IsUsersVoting: false,
+		TurnsNum:      gameTurnNum,
+		RoundNum:      gameRoundNum,
+		MaxPlayer:     gameMaxPlayer,
+		InfoIdx:       0,
 	}
 
 	return &GameState{
@@ -164,25 +166,16 @@ func (gs *GameState) GetQuestion() string {
 	return gs.questions[0]
 }
 
-func (gs *GameState) SearchUserInUserSelections(idx int, user common.User) (models.UserSelection, bool) {
+func (gs *GameState) SearchUserInUserSelections(user common.User) (models.UserSelection, bool) {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	idx := gs.Status.InfoIdx
 	for _, v := range gs.Info[idx].UserSelections {
 		if v.User.UUID == user.UUID {
 			return v, true
 		}
 	}
 	return models.UserSelection{}, false
-}
-
-// GetUserSelections: Get user selections
-func (gs *GameState) GetUserSelections() []models.UserSelection {
-	gs.mutex.Lock()
-	defer gs.mutex.Unlock()
-	if len(gs.Info) == 0 {
-		return make([]models.UserSelection, 0)
-	}
-	return gs.Info[gs.Status.InfoIdx].UserSelections
 }
 
 // GetNowUserSelections
@@ -262,6 +255,8 @@ func (gs *GameState) SetIfResetRound(userManager *UserManager) {
 	infoIdx := gs.Status.InfoIdx
 	gs.Status.IsStarted = false
 	gs.Status.IsOver = false
+	gs.Status.IsUsersVoting = false
+
 	gs.Info[infoIdx].TurnsLeft = global.GameTurnNum * len(gs.Info[infoIdx].PlayerList)
 
 	gs.Info[infoIdx].NowUserIndex = 0
@@ -277,6 +272,8 @@ func (gs *GameState) SetIfGameTotallyReset(userManager *UserManager) {
 	gs.Status.IsStarted = false
 	gs.Status.IsOver = false
 	gs.Status.InfoIdx = 0
+	gs.Status.IsUsersVoting = false
+
 	gs.Info = make([]models.Game, 0)
 
 	// Reset Players & Sort Players
@@ -318,6 +315,7 @@ func (gs *GameState) InitializeRoundInfo(userManager *UserManager, webSocketServ
 
 	gs.Status.IsStarted = true
 	gs.Status.IsOver = false
+	gs.Status.IsUsersVoting = false
 }
 
 // SetGameInfoPlayerList: Set game info player list
@@ -381,14 +379,24 @@ func (gs *GameState) CheckIsRoundOver() bool {
 	return gs.Info[gs.Status.InfoIdx].TurnsLeft == 0
 }
 
+// CheckIsGameStarted: Check if game is started
+func (gs *GameState) CheckIsGameStarted() bool {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+	return gs.Status.IsStarted
+}
+
 // CheckAllUserVote: Check if all user vote
-func (gs *GameState) CheckAllUserVoted() bool {
+func (gs *GameState) CheckAllUserVoted(userManager *UserManager) bool {
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
 	if len(gs.Info) == 0 {
 		return false
 	}
-	return len(gs.Info[gs.Status.InfoIdx].UserSelections) == len(gs.Info[gs.Status.InfoIdx].PlayerList)
+	log.Println("len(gs.Info[gs.Status.InfoIdx].UserSelections)", len(gs.Info[gs.Status.InfoIdx].UserSelections))
+	log.Println("len(gs.Info[gs.Status.InfoIdx].PlayerList)", len(gs.Info[gs.Status.InfoIdx].PlayerList))
+	GPTNum := len(userManager.GetGPTUsers())
+	return len(gs.Info[gs.Status.InfoIdx].UserSelections) >= len(gs.Info[gs.Status.InfoIdx].PlayerList)-GPTNum
 }
 
 // SetMaxPlayer
@@ -436,4 +444,11 @@ func (gs *GameState) CheckAllHumanPlayerReady(userManager *UserManager) bool {
 		return humanPlayerNum == gs.Status.MaxPlayer-GPTNum
 	}
 	return humanPlayerNum == gs.Info[gs.Status.InfoIdx].MaxPlayer-GPTNum
+}
+
+// SetIsUsersVotingTrue: Set isUsersVoting true
+func (gs *GameState) SetIsUsersVotingTrue() {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+	gs.Status.IsUsersVoting = true
 }

@@ -264,18 +264,13 @@ func (um *UserManager) SetPlayersRandomlyShuffled(webSocketService *WebSocketSer
 		if !isGPTUser {
 			webSocketService.SetClientsByUserUUID(user)
 		}
+	}
 
-	}
-	log.Println("users:", users)
-	// log.Println("players:", um.GetPlayers()
-	for _, v := range um.GetSortedPlayers() {
-		log.Println("olayers:", v)
-	}
 }
 
 func (um *UserManager) ExcludePlayersFromSelections(webSocketService *WebSocketService, gameState *GameState) (vote int, eliminatedPlayer common.User, remainingPlayerList []common.User) {
 
-	userSelections := gameState.GetUserSelections()
+	userSelections := gameState.GetNowUserSelections()
 	// GPTUsers := um.GetGPTUsers()
 	playerList := um.GetSortedPlayers()
 
@@ -368,7 +363,9 @@ func (um *UserManager) GetMessages() []models.Message {
 func (um *UserManager) AddMessage(message models.Message) {
 	um.mutex.Lock()
 	defer um.mutex.Unlock()
-
+	if len(um.Messages) > 0 && um.Messages[len(um.Messages)-1] == message {
+		return
+	}
 	um.Messages = append(um.Messages, message)
 }
 
@@ -449,4 +446,14 @@ func (um *UserManager) SetSortedPlayerByUser(player common.User) {
 			break
 		}
 	}
+}
+
+func (um *UserManager) GetPrevMessage() (models.Message, bool) {
+	um.mutex.Lock()
+	defer um.mutex.Unlock()
+
+	if len(um.Messages) > 0 {
+		return um.Messages[len(um.Messages)-1], true
+	}
+	return models.Message{}, false
 }

@@ -22,9 +22,9 @@ func BroadcastConsoleSelections(userManager *services.UserManager, webSocketServ
 	chatResponse := utils.CreateResponseUsingTimestamp(userManager, gameState, timestamp)
 	chatResponse.Action = "send_result"
 	chatResponse.Message = "send_result"
-	chatResponse.UserSelection = gameState.GetUserSelections()
+	chatResponse.UserSelection = gameState.GetNowUserSelections()
 
-	broadCastToSomeone(clients, conn, chatResponse)
+	broadcastToSomeone(clients, conn, chatResponse)
 
 }
 
@@ -35,6 +35,7 @@ func HandleAISelection(gameState *services.GameState, e models.WsPayload) {
 		Selection: e.UserSelection.Selection,
 		Reason:    e.UserSelection.Reason,
 	}
+	log.Println("HandleAISelection:", selection)
 	gameState.AddUserSelection(selection)
 }
 func ProcessNextTurn(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
@@ -44,7 +45,8 @@ func ProcessNextTurn(userManager *services.UserManager, webSocketService *servic
 	}
 	if gameState.CheckIsRoundOver() {
 		gameState.SetIfRoundIsOver()
-		ProcessAllPlayersVoted(userManager, webSocketService, gameState)
+		// ProcessAllPlayersVoted(userManager, webSocketService, gameState)
+		// broadcastChooseAIToAll(userManager, webSocketService, gameState)
 		return
 	}
 	log.Println("ProcessNextTurn")
@@ -87,7 +89,7 @@ func ProcessNextTurn(userManager *services.UserManager, webSocketService *servic
 	}
 
 	clients := webSocketService.GetClients()
-	broadCastToSomeone(clients, nextConn, response)
+	broadcastToSomeone(clients, nextConn, response)
 
 }
 

@@ -3,6 +3,8 @@ package handlers
 import (
 	"liar-of-turing/common"
 	"liar-of-turing/models"
+	"liar-of-turing/services"
+	"liar-of-turing/utils"
 	"log"
 )
 
@@ -20,7 +22,7 @@ func broadcastToAll(clients map[models.WebSocketConnection]common.User, response
 	log.Println("Broadcasted message")
 }
 
-func broadCastToSomeone(clients map[models.WebSocketConnection]common.User, client models.WebSocketConnection, response models.WsJsonResponse) {
+func broadcastToSomeone(clients map[models.WebSocketConnection]common.User, client models.WebSocketConnection, response models.WsJsonResponse) {
 	common.GlobalMutex.Lock()
 	defer common.GlobalMutex.Unlock()
 
@@ -30,6 +32,36 @@ func broadCastToSomeone(clients map[models.WebSocketConnection]common.User, clie
 		delete(clients, client)
 	}
 	log.Println("Broadcasted message")
+}
+
+func broadcastChooseAIToAll(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) {
+	isUsersVoting := gameState.GetStatus().IsUsersVoting
+	if isUsersVoting {
+		return
+	}
+	gameState.SetIsUsersVotingTrue()
+
+	adminUser := userManager.GetAdminUser()
+	message := utils.CreateMessageWithAutoTimestamp(userManager, adminUser)
+	message.Message = "AI를 선택해주세요."
+	message.MessageType = "info"
+
+	response := utils.CreateInitalizeResponse(userManager, gameState)
+	response.Action = "choose_ai"
+	response.Message = message.Message
+	response.MessageType = message.MessageType
+	response.User = message.User
+
+	clients := webSocketService.GetClients()
+	// broadcastToAll(clients, response)
+	players := gameState.GetNowGameInfo().PlayerList
+	for _, player := range players {
+		conn, exists := webSocketService.RetrieveClientByUUID(player.UUID)
+		_, isVoted := gameState.SearchUserInUserSelections(player)
+		if player.Role == "human" && exists && !isVoted {
+			broadcastToSomeone(clients, conn, response)
+		}
+	}
 }
 
 // func HandleUserJoin(userManager *services.UserManager, e models.WsPayload, clients map[models.WebSocketConnection]common.User) {
