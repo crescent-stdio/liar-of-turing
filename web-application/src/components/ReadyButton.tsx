@@ -23,6 +23,8 @@ export default function ReadyButton({
       message: "",
       game_round: 0,
       game_turns_left: 0,
+      game_round_num: 0,
+      game_turn_num: 0,
       user_selection: initialUserSelection,
     };
     sendMessage(jsonData);

@@ -12,6 +12,8 @@ export default function SetGameNums({ sendMessage }: SetGameNumsProps) {
   const [gameTurnsNum, setGameTurnsNum] = useAtom(gameTurnsNumAtom);
   const [nowGameRound, setNowGameRound] = useState(gameRound);
   const [nowGameTurnsNum, setNowGameTurnsNum] = useState(gameTurnsNum);
+  const [gameRoundNum, setGameRoundNum] = useAtom(gameRoundAtom);
+  const [gameTurnsLeft, setGameTurnsLeft] = useAtom(gameTurnsNumAtom);
   const handleSetGameRound = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (nowGameRound <= gameRound) return;
@@ -22,7 +24,9 @@ export default function SetGameNums({ sendMessage }: SetGameNumsProps) {
       message: `Set Game Round`,
       timestamp: Date.now(),
       game_round: nowGameRound,
-      game_turns_left: gameTurnsNum,
+      game_turns_left: gameTurnsLeft,
+      game_turn_num: gameTurnsNum,
+      game_round_num: gameRoundNum,
       user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
@@ -38,7 +42,9 @@ export default function SetGameNums({ sendMessage }: SetGameNumsProps) {
       message: `Set Game Turn`,
       timestamp: Date.now(),
       game_round: gameRound,
-      game_turns_left: nowGameTurnsNum,
+      game_round_num: gameRoundNum,
+      game_turns_left: gameTurnsLeft,
+      game_turn_num: nowGameTurnsNum,
       user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
