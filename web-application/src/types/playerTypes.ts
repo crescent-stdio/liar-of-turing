@@ -16,7 +16,6 @@ export interface Game {
 }
 export interface Message {
   timestamp: number;
-  message_id: number;
   user: User;
   message: string;
   message_type: string;

@@ -15,6 +15,7 @@ def get_message_from_GPT(messageRequest: MessageData):
 
     completion = client.chat.completions.create(
     model="gpt-4",
+    # model="gpt-3.5-turbo",
     messages=[
         {"role": "system", "content": '''
         문제: 단체 채팅방의 참여자로서 다음에 이어질 문장은 무엇인가? 모든 조건을 반드시 만족하도록 할 것.
@@ -28,9 +29,10 @@ def get_message_from_GPT(messageRequest: MessageData):
         {"role": "user", "content": chatlog}])
         
     answer = completion.choices[0].message.content
-    answer = answer.split(':')[1].lstrip()
+    if len(answer.split(':')) > 1:
+        answer = answer.split(':')[1].lstrip()
     print("result_message: ", answer)
-    return {"gptName": messageRequest.gptName, "message": answer}
+    return {"user_name": messageRequest.user_name, "message": answer}
 
 #     return completion.choices[0].message.content
 

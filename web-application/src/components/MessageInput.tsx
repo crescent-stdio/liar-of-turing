@@ -2,7 +2,9 @@ import useMessageInput from "@/hook/useMessageInput";
 import { initialUserSelection } from "@/store/chatStore";
 import {
   gameRoundAtom,
+  gameRoundNumAtom,
   gameTurnsLeftAtom,
+  gameTurnsNumAtom,
   isYourTurnAtom,
   maxPlayerAtom,
 } from "@/store/gameAtom";
@@ -27,9 +29,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
     resetMessage,
   } = useMessageInput();
   const maxPlayer = useAtomValue(maxPlayerAtom);
-  const [, setIsYourTurn] = useAtom(isYourTurnAtom);
+  const [isYourTurn, setIsYourTurn] = useAtom(isYourTurnAtom);
   const gameTurnsLeft = useAtomValue(gameTurnsLeftAtom);
   const gameRound = useAtomValue(gameRoundAtom);
+  const gameRoundNum = useAtomValue(gameRoundNumAtom);
+  const gameTurnsNum = useAtomValue(gameTurnsNumAtom);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     handleCustomSubmit(event);
@@ -41,13 +45,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
       message: message,
       game_round: gameRound,
       game_turns_left: gameTurnsLeft,
+      game_round_num: gameRoundNum,
+      game_turn_num: gameTurnsNum,
       user_selection: initialUserSelection,
     };
     sendMessage(jsonData);
     resetMessage();
     setIsYourTurn(false);
   };
-
+  if (!isYourTurn) return <></>;
   return (
     <form className="mt-4 flex flex-row" onSubmit={handleSubmit}>
       <label htmlFor="message">

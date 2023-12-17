@@ -1,5 +1,5 @@
 from pydantic import BaseModel
 
 class MessageData(BaseModel):
-    gptName: str
+    user_name: str
     message: str

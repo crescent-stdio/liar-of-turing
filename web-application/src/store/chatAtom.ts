@@ -81,7 +81,6 @@ export const updateChatLog: (set: any, data: WsJsonResponse | null) => void = (
     set(chatLogAtom, initialMessage);
   } else {
     const message = {
-      message_id: data.message_id,
       timestamp: data.timestamp,
       user: data.user,
       message: data.message,

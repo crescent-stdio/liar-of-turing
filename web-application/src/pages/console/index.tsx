@@ -30,7 +30,6 @@ export default function Console() {
   const fullUserList = [adminUser, ...userList];
   const gameRound = useAtomValue(gameRoundAtom);
   // const fullUserList = userList.concat(user);
-  console.log(userSelectionList);
   return (
     <main className="py-8 mx-auto w-[80vw] max-w-2xl min-h-max relative">
       <h1 className="text-3xl font-bold mb-4">Console</h1>

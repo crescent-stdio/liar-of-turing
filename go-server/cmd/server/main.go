@@ -1,10 +1,12 @@
 package main
 
 import (
-	"liarOfTuring/internal/handlers"
+	"liar-of-turing/common"
+	"liar-of-turing/internal/handlers"
+	"liar-of-turing/services"
+	"liar-of-turing/utils"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
@@ -29,12 +31,20 @@ func main() {
 		MaxAge:           3000, // 5 min
 	})
 
-	FastAPIURL := os.Getenv("FASTAPI_URL")
+	common.SetFastAPIURL()
+	utils.LoadNicknames()
 
-	mux := routes()
 	log.Println("Starting channel listener ")
-	go handlers.ListenToWsChannel()
-	go handlers.ListenToGPTWsChannel(FastAPIURL)
+	userManager := services.NewUserManager()
+	userManager.SetAdminUserByDefault()
+	userManager.SetGPTUsersByDefault()
+	webSocketService := services.NewWebSocketService()
+	gameState := services.NewGameState()
+	gameState.SetGPTEntryNums()
+	gameState.SetGPTReadyNums()
+	mux := routes(userManager, webSocketService, gameState)
+	go handlers.ListenToWebSocketChannel(userManager, webSocketService, gameState)
+	// go handlers.ListenToGPTWebSocketChannel(FastAPIURL)
 
 	// bty env
 	server := http.Server{
@@ -51,10 +61,14 @@ func main() {
 
 }
 
-func routes() http.Handler {
+func routes(userManager *services.UserManager, webSocketService *services.WebSocketService, gameState *services.GameState) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", handlers.WsEndpoint)
-	mux.HandleFunc("/withGPT", handlers.WithGPTWsEndpoint)
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandleWebSocketRequest(w, r, userManager, webSocketService, gameState)
+	})
+	mux.HandleFunc("/withGPT", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandleGPTWebSocketRequest(w, r, webSocketService)
+	})
 
 	return mux
 }

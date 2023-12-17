@@ -1,4 +1,5 @@
 import { isFinishedSubmitionAtom } from "@/store/gameAtom";
+import { SELECTION_OPEN_TIME } from "@/store/gameStore";
 import { User } from "@/types/playerTypes";
 import { UserSelection, WsJsonRequest } from "@/types/wsTypes";
 import { useAtom } from "jotai";
@@ -17,12 +18,12 @@ export default function ChooseAIInput({
   const [AIUsername, setAIUsername] = useState<string>(userList[0].username);
   const [reason, setReason] = useState<string>("");
   const [, setIsSubmitted] = useAtom(isFinishedSubmitionAtom);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(true);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const handleChooseAI = (event: React.FormEvent<HTMLFormElement>) => {
-    console.log(AIUsername, reason);
     event.preventDefault();
     const user_selection: UserSelection = {
+      timestamp: Date.now(),
       user: userData,
       selection: AIUsername,
       reason: reason,
@@ -35,6 +36,8 @@ export default function ChooseAIInput({
       message: reason,
       game_round: 0,
       game_turns_left: 0,
+      game_round_num: 0,
+      game_turn_num: 0,
       user_selection: user_selection,
     };
     sendMessage(jsonData);
@@ -50,8 +53,14 @@ export default function ChooseAIInput({
 
   // Set up global click listener
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsModalOpen(true);
+    }, SELECTION_OPEN_TIME);
+
     window.addEventListener("click", toggleModal);
+
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("click", toggleModal);
     };
   }, []);
